@@ -26,19 +26,40 @@
                     "default": [
                         {
                             "path": "**/*.js",
-                            "code": "import ${_.startCase(fileName).replace(/\\s/g, '')} from '${filePath}';\n"
+                            "code": "import ${hasExportDefault ? '' : '* as '}${_.startCase(fileName).replace(/\\s/g, '')} from '${filePath}';\n"
                         }
                     ]
                 },
                 "haste.nodes": {
                     "type": "array",
                     "items": {
-                        "type": "object"
+                        "type": "object",
+                        "required": [
+                            "name"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "code": {
+                                "type": [
+                                    "string",
+                                    "array"
+                                ]
+                            },
+                            "file": {
+                                "type": "string"
+                            }
+                        }
                     },
                     "default": [
                         {
+                            "name": "[addon,assert,buffer,child_process,cluster,console,crypto,dgram,dns,domain,events,fs,http,http,https,net,os,path,punycode,querystring,readline,repl,stream,string_decoder,timers,tls,tty,url,util,v8,vm,zlib]",
+                            "code": "import * as ${nodeName} from '${nodeName}';\n"
+                        },
+                        {
                             "name": "*",
-                            "code": "import ${nodeName} from '${nodeName}'\n"
+                            "code": "import ${nodeName} from '${nodeName}';\n"
                         }
                     ]
                 },
@@ -49,6 +70,18 @@
                         "cursor"
                     ],
                     "default": "beforeFirstImport"
+                },
+                "haste.javascriptParsingOptions": {
+                    "type": "object",
+                    "description": "",
+                    "default": {
+                        "ecmaVersion": 7,
+                        "ecmaFeatures": {
+                            "jsx": true,
+                            "impliedStrict": true,
+                            "experimentalObjectRestSpread": true
+                        }
+                    }
                 }
             }
         },
@@ -71,10 +104,11 @@
         "postinstall": "node ./node_modules/vscode/bin/install"
     },
     "devDependencies": {
+        "@types/babylon": "^6.7.15",
         "@types/node": "^6.0.40",
         "@types/lodash": "^4.14.54",
         "@types/minimatch": "^2.0.29",
-        "espree": "^3.4.0",
+        "babylon": "^6.16.1",
         "lodash": "^4.17.4",
         "minimatch": "^3.0.3",
         "typescript": "^2.0.3",

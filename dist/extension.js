@@ -17,11 +17,14 @@ const _ = require("lodash");
 const minimatch_1 = require("minimatch");
 const espree = require("espree");
 const WIN_SLASH = /\\/g;
+const fileCache = new Map();
+let nodeCache = [];
 function activate(context) {
     const config = vscode.workspace.getConfiguration('haste');
     const filePatterns = config.get('files', []);
     const nodePatterns = config.get('nodes', []);
     const insertAt = config.get('insertAt');
+    const parsingOptions = config.get('javascriptParsingOptions');
     filePatterns.forEach(pattern => {
         pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code);
     });
@@ -30,10 +33,9 @@ function activate(context) {
         pattern.exec = matcher.match.bind(matcher);
         pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code);
     });
-    let nodeModules = [];
     if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
         const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'));
-        nodeModules = _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
+        nodeCache = _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
             .flatten()
             .sortBy()
             .map(nodeName => {
@@ -61,6 +63,13 @@ function activate(context) {
             }
         })
             .compact()
+            .map(nodeModule => ({
+            label: nodeModule.name,
+            description: nodeModule.vers,
+            type: 'node',
+            name: nodeModule.name,
+            temp: nodeModule.temp,
+        }))
             .value();
     }
     let disposable = vscode.commands.registerCommand('haste', () => __awaiter(this, void 0, void 0, function* () {
@@ -68,35 +77,32 @@ function activate(context) {
         const currentFilePath = currentDocument.fileName;
         const currentFileDirx = path.dirname(currentFilePath);
         let items = [];
-        const cache = new Map();
         for (let index = 0; index < filePatterns.length; index++) {
             const pattern = filePatterns[index];
             const files = yield vscode.workspace.findFiles(pattern.path, null, 9000);
             const CURRENT_DIRX = /^\.\//;
             _.chain(files)
-                .sortBy(file => getRelativePath(currentFileDirx, file.fsPath).replace(CURRENT_DIRX, '*'))
-                .forEach(file => {
-                if (file.fsPath !== currentFilePath) {
-                    items.push({
+                .map(file => {
+                if (fileCache.has(file.fsPath) === false) {
+                    fileCache.set(file.fsPath, {
                         label: path.basename(file.path),
-                        description: file.fsPath.replace(vscode.workspace.rootPath, '').replace(WIN_SLASH, '/'),
+                        description: _.trimStart(file.fsPath.replace(vscode.workspace.rootPath, '').replace(WIN_SLASH, '/'), '/'),
                         type: 'file',
                         path: file.fsPath,
                         temp: pattern.temp,
                     });
                 }
+                return fileCache.get(file.fsPath);
+            })
+                .sortBy((item) => getRelativePath(currentFileDirx, item.path).replace(CURRENT_DIRX, '*'))
+                .forEach((item) => {
+                if (item.path !== currentFilePath) {
+                    items.push(item);
+                }
             })
                 .value();
         }
-        nodeModules.forEach(nodeModule => {
-            items.push({
-                label: nodeModule.name,
-                description: nodeModule.vers,
-                type: 'node',
-                name: nodeModule.name,
-                temp: nodeModule.temp,
-            });
-        });
+        items = items.concat(nodeCache);
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             return null;
@@ -105,25 +111,12 @@ function activate(context) {
         if (!select) {
             return null;
         }
+        const currentCodeTree = getCodeTree(currentDocument.getText(), parsingOptions);
         let existingImportItems = [];
-        try {
-            existingImportItems = espree.parse(currentDocument.getText(), {
-                range: true,
-                loc: true,
-                comment: false,
-                sourceType: 'module',
-                ecmaVersion: 6,
-                ecmaFeatures: {
-                    jsx: true,
-                    impliedStrict: true,
-                    experimentalObjectRestSpread: true,
-                }
-            }).body.filter((line) => line.type === 'ImportDeclaration' && line.source);
+        if (currentCodeTree && currentCodeTree.body) {
+            existingImportItems = currentCodeTree.body.filter((line) => line.type === 'ImportDeclaration' && line.source);
         }
-        catch (ex) {
-            console.error(ex);
-        }
-        let code;
+        let code = '';
         if (select.type === 'node') {
             if (existingImportItems.find((line) => line.source.value === select.name)) {
                 vscode.window.showErrorMessage(`Importing '${select.name}' already exists.`);
@@ -142,19 +135,25 @@ function activate(context) {
             }
             const extension = path.extname(select.path);
             const selectFileNameWithoutExtension = _.camelCase(path.basename(select.path).replace(new RegExp(_.escapeRegExp(extension) + '$'), ''));
+            const selectCodeText = fs.readFileSync(select.path, 'utf-8');
+            const selectCodeTree = getCodeTree(selectCodeText, parsingOptions);
             code = select.temp({
                 _,
                 fullPath: select.path,
                 filePath: selectRelativePath,
                 fileName: selectFileNameWithoutExtension,
                 fileExtn: extension.replace(/^\./, ''),
+                codeText: selectCodeText,
+                codeTree: selectCodeTree,
+                hasExportDefault: /*selectCodeTree === null ||*/ findInCodeTree(selectCodeTree, { type: 'ExportDefaultDeclaration' }) !== undefined,
+                findInCodeTree,
             });
         }
-        editor.edit(builder => {
+        editor.edit(worker => {
             let position = editor.selection.active;
             if (insertAt === 'beforeFirstImport') {
                 if (existingImportItems.length > 0) {
-                    position = new vscode.Position(_.first(existingImportItems).loc.start.line, _.first(existingImportItems).loc.start.column);
+                    position = new vscode.Position(_.first(existingImportItems).loc.start.line - 1, _.first(existingImportItems).loc.start.column);
                 }
                 else {
                     position = new vscode.Position(0, 0);
@@ -162,13 +161,13 @@ function activate(context) {
             }
             else if (insertAt === 'afterLastImport') {
                 if (existingImportItems.length > 0) {
-                    position = new vscode.Position(_.last(existingImportItems).loc.start.line, _.last(existingImportItems).loc.start.column);
+                    position = new vscode.Position(_.last(existingImportItems).loc.end.line, 0);
                 }
                 else {
                     position = new vscode.Position(0, 0);
                 }
             }
-            builder.insert(position, code);
+            worker.insert(position, code);
         });
     }));
     vscode.workspace.onDidChangeConfiguration(() => {
@@ -178,6 +177,8 @@ function activate(context) {
 }
 exports.activate = activate;
 function deactivate() {
+    fileCache.clear();
+    nodeCache = [];
 }
 exports.deactivate = deactivate;
 function getRelativePath(currentPath, anotherPath) {
@@ -186,5 +187,37 @@ function getRelativePath(currentPath, anotherPath) {
         relativePath = './' + relativePath;
     }
     return relativePath;
+}
+function getCodeTree(text, options = {}) {
+    try {
+        return espree.parse(text, Object.assign({}, options, { sourceType: 'module', range: true, loc: true, comment: false }));
+    }
+    catch (ex) {
+        console.error(ex);
+        return null;
+    }
+}
+function findInCodeTree(branch, target) {
+    if (branch === null) {
+        return undefined;
+    }
+    else if (_.isMatch(branch, target)) {
+        return target;
+    }
+    else if (_.isArrayLike(branch['body'])) {
+        for (let index = 0; index < branch['body'].length; index++) {
+            const result = findInCodeTree(branch['body'][index], target);
+            if (result !== undefined) {
+                return result;
+            }
+        }
+        return undefined;
+    }
+    else if (_.isObject(branch['body'])) {
+        return findInCodeTree(branch['body'], target);
+    }
+    else {
+        return undefined;
+    }
 }
 //# sourceMappingURL=extension.js.map
