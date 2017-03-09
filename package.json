@@ -11,26 +11,83 @@
         "Other"
     ],
     "activationEvents": [
-        "onCommand:extension.sayHello"
+        "onCommand:extension.haste"
     ],
     "main": "./dist/extension",
     "contributes": {
+        "configuration": {
+            "title": "Haste configurations",
+            "properties": {
+                "haste.files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    },
+                    "default": [
+                        {
+                            "path": "**/*.js",
+                            "code": "import ${_.camelCase(fileName)} from '${filePath}'\n"
+                        }
+                    ]
+                },
+                "haste.nodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    },
+                    "default": [
+                        {
+                            "name": "reactDOM",
+                            "code": "import ReactDOM from '${nodeName}'\n"
+                        },
+                        {
+                            "name": "react*",
+                            "code": "import R${_.camelCase(nodeName.substring(1))} from '${nodeName}'\n"
+                        },
+                        {
+                            "name": "classnames",
+                            "code": "import classNames from '${nodeName}'\n"
+                        },
+                        {
+                            "name": "lodash",
+                            "code": "import _ from '${nodeName}'\n"
+                        },
+                        {
+                            "name": "*",
+                            "code": "import ${nodeName} from '${nodeName}'\n"
+                        }
+                    ]
+                },
+                "haste.insertAtTheTopMost": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
         "commands": [
             {
-                "command": "extension.sayHello",
-                "title": "Hello World"
+                "command": "extension.haste",
+                "title": "Adds a file snippet quickly"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "extension.haste",
+                "key": "ctrl+shift+1"
             }
         ]
     },
     "scripts": {
         "vscode:prepublish": "tsc --project ./",
-        "compile": "tsc -watch --project ./",
+        "compile": "tsc --project ./",
         "postinstall": "node ./node_modules/vscode/bin/install"
     },
     "devDependencies": {
         "@types/node": "^6.0.40",
         "@types/lodash": "^4.14.54",
+        "@types/minimatch": "^2.0.29",
         "lodash": "^4.17.4",
+        "minimatch": "^3.0.3",
         "typescript": "^2.0.3",
         "vscode": "^1.0.0"
     }
