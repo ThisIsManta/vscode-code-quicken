@@ -27,7 +27,13 @@
                         ],
                         "properties": {
                             "path": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "array"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                }
                             },
                             "code": {
                                 "type": [

@@ -4,7 +4,7 @@ import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as _ from 'lodash'
-import { Minimatch, match } from 'minimatch'
+import { match } from 'minimatch'
 import * as babylon from 'babylon'
 
 const WIN_SLASH = /\\/g
@@ -15,19 +15,40 @@ let nodeCache = []
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get('files', []) as Array<{ path: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, omitExtensionInFilePath: boolean | string, insertAt: string }>
-    const nodePatterns = config.get('nodes', []) as Array<{ name: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, insertAt: string }>
+    const filePatterns = config.get('files', []) as Array<{
+        path: string | Array<string>,
+        code: string | string[],
+        when?: string,
+        isMatch: (string) => boolean,
+        interpolate: (object) => string,
+        omitExtensionInFilePath: boolean | string,
+        insertAt: string,
+        inclusion: Array<string>,
+        exclusion: Array<string>
+    }>
+    const nodePatterns = config.get('nodes', []) as Array<{
+        name: string,
+        code: string | string[],
+        when?: string,
+        exec: (string) => boolean,
+        temp: (object) => string,
+        insertAt: string
+    }>
     const insertAt = config.get('insertAt') as string
     const parsingPlugins = config.get('javascript.parser.plugins') as Array<string>
 
     filePatterns.forEach(pattern => {
-        const matcher = new Minimatch(pattern.path)
-        pattern.exec = matcher.match.bind(matcher)
-        pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
+        const multiPaths = typeof pattern.path === 'string' ? [pattern.path as string] : (pattern.path as Array<string>)
+        pattern.inclusion = multiPaths.filter(item => item.startsWith('!') === false)
+        pattern.exclusion = _.difference(multiPaths, pattern.inclusion).map(item => _.trimStart(item, '!'))
+        pattern.isMatch = (givenPath: string) => {
+            const matcher = (glob) => match([givenPath], glob).length > 0
+            return pattern.inclusion.some(matcher) && !pattern.exclusion.some(matcher)
+        }
+        pattern.interpolate = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
     nodePatterns.forEach(pattern => {
-        const matcher = new Minimatch(pattern.name)
-        pattern.exec = matcher.match.bind(matcher)
+        pattern.exec = (givenPath: string) => match([givenPath], pattern.name).length > 0
         pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
 
@@ -81,7 +102,12 @@ export function activate(context: vscode.ExtensionContext) {
 
         const distinctFilePatterns = _.uniqBy(filePatterns, 'path')
         for (let index = 0; index < distinctFilePatterns.length; index++) {
-            const files = await vscode.workspace.findFiles(distinctFilePatterns[index].path, null, 9000)
+            const pattern = distinctFilePatterns[index]
+            const files = await vscode.workspace.findFiles(
+                pattern.inclusion.length === 1 ? pattern.inclusion[0] : ('{' + pattern.inclusion.join(',') + '}'),
+                pattern.exclusion.length === 0 ? null : (pattern.exclusion.length === 1 ? pattern.exclusion[0] : ('{' + pattern.exclusion.join(',') + '}')),
+                9000
+            )
             _.chain(files)
                 .map(file => {
                     if (fileCache.has(file.fsPath) === false) {
@@ -142,10 +168,10 @@ export function activate(context: vscode.ExtensionContext) {
             const selectFileExtn = path.extname(select.path).replace(/^\./, '')
             const selectFileNameWithoutExtn = path.basename(select.path).replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
             const selectCodeText = fs.readFileSync(select.path, 'utf-8')
-            const selectCodeTree = getCodeTree(selectCodeText, parsingPlugins)
+            const selectCodeTree = /(js|ts)/.test(currentFileExtn) ? getCodeTree(selectCodeText, parsingPlugins) : null
 
             const pattern = filePatterns.find(pattern => {
-                if (pattern.exec(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'))) {
+                if (pattern.isMatch(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'))) {
                     if (pattern.when) {
                         try {
                             return _.template('${' + pattern.when + '}')({
@@ -179,7 +205,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return null
             }
 
-            code = pattern.temp({
+            code = pattern.interpolate({
                 _, // Lodash
                 fullPath: select.path,
                 filePath: selectRelativePath,
