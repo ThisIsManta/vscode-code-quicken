@@ -39,7 +39,11 @@
                                 "type": "string"
                             },
                             "omitExtensionInFilePath": {
-                                "type": "string"
+                                "type": [
+                                    "boolean",
+                                    "string"
+                                ],
+                                "default": false
                             },
                             "insertAt": {
                                 "enum": [

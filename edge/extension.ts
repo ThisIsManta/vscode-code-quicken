@@ -15,7 +15,7 @@ let nodeCache = []
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get('files', []) as Array<{ path: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, omitExtensionInFilePath: string, insertAt: string }>
+    const filePatterns = config.get('files', []) as Array<{ path: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, omitExtensionInFilePath: boolean | string, insertAt: string }>
     const nodePatterns = config.get('nodes', []) as Array<{ name: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, insertAt: string }>
     const insertAt = config.get('insertAt') as string
     const parsingPlugins = config.get('javascript.parser.plugins') as Array<string>
@@ -170,7 +170,7 @@ export function activate(context: vscode.ExtensionContext) {
             insertAt = pattern.insertAt
 
             let selectRelativePath = getRelativePath(currentFileDirx, select.path)
-            if (pattern.omitExtensionInFilePath.length > 0 && match([selectFileExtn], pattern.omitExtensionInFilePath)) {
+            if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtn)) {
                 selectRelativePath = selectRelativePath.replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
             }
 
