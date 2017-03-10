@@ -21,12 +21,48 @@
                 "haste.files": {
                     "type": "array",
                     "items": {
-                        "type": "object"
+                        "type": "object",
+                        "required": [
+                            "path"
+                        ],
+                        "properties": {
+                            "path": {
+                                "type": "string"
+                            },
+                            "code": {
+                                "type": [
+                                    "string",
+                                    "array"
+                                ]
+                            },
+                            "when": {
+                                "type": "string"
+                            },
+                            "omitExtensionInFilePath": {
+                                "type": "string"
+                            },
+                            "insertAt": {
+                                "enum": [
+                                    "beforeFirstImport",
+                                    "afterLastImport",
+                                    "top",
+                                    "bottom",
+                                    "cursor"
+                                ],
+                                "default": "cursor"
+                            }
+                        }
                     },
                     "default": [
                         {
                             "path": "**/*.js",
-                            "code": "import ${hasExportDefault ? '' : '* as '}${_.startCase(fileName).replace(/\\s/g, '')} from '${filePath}';\n"
+                            "code": "import ${hasExportDefault ? '' : '* as '}${_.startCase(fileName).replace(/\\s/g, '')} from '${filePath}';\n",
+                            "insertAt": "beforeFirstImport"
+                        },
+                        {
+                            "path": "**/*.styl",
+                            "code": "@import '${filePath}'\n",
+                            "when": "fileExtn === 'styl'"
                         }
                     ]
                 },
@@ -47,8 +83,15 @@
                                     "array"
                                 ]
                             },
-                            "file": {
-                                "type": "string"
+                            "insertAt": {
+                                "enum": [
+                                    "beforeFirstImport",
+                                    "afterLastImport",
+                                    "top",
+                                    "bottom",
+                                    "cursor"
+                                ],
+                                "default": "cursor"
                             }
                         }
                     },
@@ -63,25 +106,20 @@
                         }
                     ]
                 },
-                "haste.insertAt": {
-                    "oneOf": [
-                        "beforeFirstImport",
-                        "afterLastImport",
-                        "cursor"
-                    ],
-                    "default": "beforeFirstImport"
-                },
-                "haste.javascriptParsingOptions": {
-                    "type": "object",
+                "haste.javascript.parser.plugins": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
                     "description": "",
-                    "default": {
-                        "ecmaVersion": 7,
-                        "ecmaFeatures": {
-                            "jsx": true,
-                            "impliedStrict": true,
-                            "experimentalObjectRestSpread": true
-                        }
-                    }
+                    "default": [
+                        "classProperties",
+                        "objectRestSpread",
+                        "exportExtensions",
+                        "asyncGenerators",
+                        "functionBind",
+                        "jsx"
+                    ]
                 }
             }
         },

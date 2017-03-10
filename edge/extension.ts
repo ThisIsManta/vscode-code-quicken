@@ -1,25 +1,28 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+/// <reference types="babel-types" />
+
 import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as _ from 'lodash'
-import { Minimatch } from 'minimatch'
-import * as espree from 'espree'
+import { Minimatch, match } from 'minimatch'
+import * as babylon from 'babylon'
 
 const WIN_SLASH = /\\/g
+const CURRENT_DIRX = /^\.\//
 
 const fileCache = new Map<string, object>()
 let nodeCache = []
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get('files', []) as Array<{ path: string, code: string | string[], temp: (object) => string }>
-    const nodePatterns = config.get('nodes', []) as Array<{ name: string, code: string | string[], temp: (object) => string, exec: (string) => boolean }>
+    const filePatterns = config.get('files', []) as Array<{ path: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, omitExtensionInFilePath: string, insertAt: string }>
+    const nodePatterns = config.get('nodes', []) as Array<{ name: string, code: string | string[], when?: string, exec: (string) => boolean, temp: (object) => string, insertAt: string }>
     const insertAt = config.get('insertAt') as string
-    const parsingOptions = config.get('javascriptParsingOptions') as object
+    const parsingPlugins = config.get('javascript.parser.plugins') as Array<string>
 
     filePatterns.forEach(pattern => {
+        const matcher = new Minimatch(pattern.path)
+        pattern.exec = matcher.match.bind(matcher)
         pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
     nodePatterns.forEach(pattern => {
@@ -67,25 +70,26 @@ export function activate(context: vscode.ExtensionContext) {
 
     let disposable = vscode.commands.registerCommand('haste', async () => {
         const currentDocument = vscode.window.activeTextEditor.document
+        const currentRootPath = vscode.workspace.rootPath
+
         const currentFilePath = currentDocument.fileName
+        const currentFileExtn = path.extname(currentFilePath).replace(/^\./, '')
+        const currentFileNameWithoutExtn = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtn + '$', 'i'), '')
         const currentFileDirx = path.dirname(currentFilePath)
 
         let items = []
 
-        for (let index = 0; index < filePatterns.length; index++) {
-            const pattern = filePatterns[index]
-            const files = await vscode.workspace.findFiles(pattern.path, null, 9000)
-            const CURRENT_DIRX = /^\.\//
-
+        const distinctFilePatterns = _.uniqBy(filePatterns, 'path')
+        for (let index = 0; index < distinctFilePatterns.length; index++) {
+            const files = await vscode.workspace.findFiles(distinctFilePatterns[index].path, null, 9000)
             _.chain(files)
                 .map(file => {
                     if (fileCache.has(file.fsPath) === false) {
                         fileCache.set(file.fsPath, {
                             label: path.basename(file.path),
-                            description: _.trimStart(file.fsPath.replace(vscode.workspace.rootPath, '').replace(WIN_SLASH, '/'), '/'),
+                            description: _.trimStart(file.fsPath.replace(currentRootPath, '').replace(WIN_SLASH, '/'), '/'),
                             type: 'file',
                             path: file.fsPath,
-                            temp: pattern.temp,
                         })
                     }
                     return fileCache.get(file.fsPath)
@@ -111,65 +115,99 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        const currentCodeTree = getCodeTree(currentDocument.getText(), parsingOptions)
+        const currentCodeTree = /(js|ts)/.test(currentFileExtn) ? getCodeTree(currentDocument.getText(), parsingPlugins) : null
         let existingImportItems = []
-        if (currentCodeTree && currentCodeTree.body) {
-            existingImportItems = currentCodeTree.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
+        if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
+            existingImportItems = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
         }
 
         let code = ''
+        let insertAt: string
         if (select.type === 'node') {
-            if (existingImportItems.find((line: any) => line.source.value === select.name)) {
-                vscode.window.showErrorMessage(`Importing '${select.name}' already exists.`)
+            const pattern = nodePatterns.find(pattern => pattern.exec(select.name))
+
+            insertAt = pattern.insertAt
+
+            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === select.name)) {
+                vscode.window.showInformationMessage(`The module '${select.name}' has been already imported.`)
                 return null
             }
 
-            code = select.temp({
+            code = pattern.temp({
                 _, // Lodash
                 nodeName: select.name,
             })
 
         } else if (select.type === 'file') {
-            const selectRelativePath = getRelativePath(currentFileDirx, select.path)
+            const selectFileExtn = path.extname(select.path).replace(/^\./, '')
+            const selectFileNameWithoutExtn = path.basename(select.path).replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
+            const selectCodeText = fs.readFileSync(select.path, 'utf-8')
+            const selectCodeTree = getCodeTree(selectCodeText, parsingPlugins)
 
-            if (existingImportItems.find((line: any) => line.source.value === selectRelativePath)) {
-                vscode.window.showErrorMessage(`Importing '${selectRelativePath}' already exists.`)
+            const pattern = filePatterns.find(pattern => {
+                if (pattern.exec(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'))) {
+                    if (pattern.when) {
+                        try {
+                            return _.template('${' + pattern.when + '}')({
+                                rootPath: currentRootPath,
+                                filePath: currentFilePath,
+                                fileName: currentFileNameWithoutExtn,
+                                fileExtn: currentFileExtn,
+                                codeTree: currentCodeTree,
+                                findInCodeTree: (target) => findInCodeTree(getCodeTree, target),
+                            }) === 'true'
+                        } catch (ex) {
+                            console.error(ex)
+                            return false
+                        }
+                    } else {
+                        return true
+                    }
+                }
+                return false
+            })
+
+            insertAt = pattern.insertAt
+
+            let selectRelativePath = getRelativePath(currentFileDirx, select.path)
+            if (pattern.omitExtensionInFilePath.length > 0 && match([selectFileExtn], pattern.omitExtensionInFilePath)) {
+                selectRelativePath = selectRelativePath.replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
+            }
+
+            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativePath)) {
+                vscode.window.showErrorMessage(`The file '${selectRelativePath}' has been already imported.`)
                 return null
             }
 
-            const extension = path.extname(select.path)
-            const selectFileNameWithoutExtension = _.camelCase(path.basename(select.path).replace(new RegExp(_.escapeRegExp(extension) + '$'), ''))
-            const selectCodeText = fs.readFileSync(select.path, 'utf-8')
-            const selectCodeTree = getCodeTree(selectCodeText, parsingOptions)
-            
-            code = select.temp({
+            code = pattern.temp({
                 _, // Lodash
                 fullPath: select.path,
                 filePath: selectRelativePath,
-                fileName: selectFileNameWithoutExtension,
-                fileExtn: extension.replace(/^\./, ''),
+                fileName: selectFileNameWithoutExtn,
+                fileExtn: selectFileExtn,
                 codeText: selectCodeText,
                 codeTree: selectCodeTree,
-                hasExportDefault: /*selectCodeTree === null ||*/ findInCodeTree(selectCodeTree, { type: 'ExportDefaultDeclaration' }) !== undefined,
-                findInCodeTree,
+                hasExportDefault: selectCodeTree === null || findInCodeTree(selectCodeTree, { type: 'ExportDefaultDeclaration' }) !== undefined,
+                findInCodeTree: (target) => findInCodeTree(getCodeTree, target),
             })
         }
 
         editor.edit(worker => {
-            let position = editor.selection.active
-            if (insertAt === 'beforeFirstImport') {
-                if (existingImportItems.length > 0) {
-                    position = new vscode.Position(_.first(existingImportItems).loc.start.line - 1, _.first(existingImportItems).loc.start.column)
-                } else {
-                    position = new vscode.Position(0, 0)
-                }
+            let position: vscode.Position
+            if (insertAt === 'beforeFirstImport' && existingImportItems.length > 0) {
+                position = new vscode.Position(_.first(existingImportItems).loc.start.line - 1, _.first(existingImportItems).loc.start.column)
 
-            } else if (insertAt === 'afterLastImport') {
-                if (existingImportItems.length > 0) {
-                    position = new vscode.Position(_.last(existingImportItems).loc.end.line, 0)
-                } else {
-                    position = new vscode.Position(0, 0)
-                }
+            } else if (insertAt === 'beforeFirstImport' && existingImportItems.length === 0 || insertAt === 'top') {
+                position = new vscode.Position(0, 0)
+
+            } else if (insertAt === 'afterLastImport' && existingImportItems.length > 0) {
+                position = new vscode.Position(_.last(existingImportItems).loc.end.line, 0)
+
+            } else if (insertAt === 'afterLastImport' && existingImportItems.length === 0 || insertAt === 'bottom') {
+                position = new vscode.Position(currentDocument.getText().replace(/\r/g, '').split('\n').length + 1, 0)
+
+            } else {
+                position = editor.selection.active
             }
 
             worker.insert(position, code);
@@ -196,14 +234,11 @@ function getRelativePath(currentPath, anotherPath) {
     return relativePath
 }
 
-function getCodeTree(text, options = {}) {
+function getCodeTree(text, plugins = []): any {
     try {
-        return espree.parse(text, {
-            ...options,
+        return babylon.parse(text, {
             sourceType: 'module',
-            range: true,
-            loc: true,
-            comment: false,
+            plugins: [...plugins]
         })
     } catch (ex) {
         console.error(ex)
