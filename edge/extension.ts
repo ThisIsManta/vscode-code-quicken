@@ -2,13 +2,13 @@ import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as _ from 'lodash'
-import { match } from 'minimatch'
+import { match as minimatch } from 'minimatch'
 import * as babylon from 'babylon'
 
 const PATH_DELIMITOR_FOR_WINDOWS = /\\/g
 const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
 const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
-const MODULE_EXPORT = {
+const MODULE_EXPORTS = {
     type: 'ExpressionStatement',
     expression: {
         type: 'AssignmentExpression',
@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
         pattern.exclusion = _.difference(multiPaths, pattern.inclusion).map(item => _.trimStart(item, '!'))
 
         pattern.matchPath = (givenPath: string) => {
-            const matcher = (glob) => match([givenPath], glob).length > 0
+            const matcher = (glob) => minimatch([givenPath], glob).length > 0
             return pattern.inclusion.some(matcher) && !pattern.exclusion.some(matcher)
         }
 
@@ -80,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
         pattern.interpolate = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
     nodePatterns.forEach(pattern => {
-        pattern.matchName = (givenPath: string) => match([givenPath], pattern.name).length > 0
+        pattern.matchName = (givenPath: string) => minimatch([givenPath], pattern.name).length > 0
 
         pattern.interpolate = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
@@ -193,7 +193,9 @@ export function activate(context: vscode.ExtensionContext) {
 
             code = pattern.interpolate({
                 _, // Lodash
+                minimatch,
                 nodeName: select.name,
+                getProperVariableName,
             })
 
         } else if (select.type === 'file') {
@@ -224,14 +226,16 @@ export function activate(context: vscode.ExtensionContext) {
 
             code = pattern.interpolate({
                 _, // Lodash
+                minimatch,
                 fullPath: select.unix,
                 filePath: selectRelativeFilePath,
                 fileName: selectFileNameWithoutExtension,
                 fileExtn: selectFileExtension,
+                getProperVariableName,
                 codeText: selectCodeText,
                 codeTree: selectCodeTree,
-                hasDefaultExport: selectCodeTree === null || findInCodeTree(selectCodeTree, EXPORT_DEFAULT) !== undefined || findInCodeTree(selectCodeTree, MODULE_EXPORT),
-                findInCodeTree: (target) => findInCodeTree(getCodeTree, target),
+                hasDefaultExport: selectCodeTree === null || findInCodeTree(selectCodeTree, EXPORT_DEFAULT) !== undefined || findInCodeTree(selectCodeTree, MODULE_EXPORTS),
+                findInCodeTree: (target) => findInCodeTree(selectCodeTree, target),
             })
         }
 
@@ -269,7 +273,7 @@ export function deactivate() {
     nodeCache.clear()
 }
 
-function getRelativePath(givenPath, rootPath) {
+function getRelativePath(givenPath: string, rootPath: string) {
     let relativePath = path.relative(rootPath, givenPath).replace(PATH_DELIMITOR_FOR_WINDOWS, '/')
     if (relativePath.startsWith('../') === false) {
         relativePath = './' + relativePath
@@ -277,12 +281,19 @@ function getRelativePath(givenPath, rootPath) {
     return relativePath
 }
 
-function getCodeTree(text, plugins = []): any {
+function getProperVariableName(fileName: string) {
+    const signs = _.get(fileName.match(/^(\W)*[_\$]+/), '0', '')
+    let title = _.startCase(fileName).replace(/\s/g, '')
+    if (signs.length === 0 && /^\d*/.test(fileName)) {
+        const digits = title.match(/^\d*/)[0]
+        title = title.substring(digits.length) + digits
+    }
+    return signs + title
+}
+
+function getCodeTree(codeText: string, plugins = []): any {
     try {
-        return babylon.parse(text, {
-            sourceType: 'module',
-            plugins: [...plugins]
-        })
+        return babylon.parse(codeText, { sourceType: 'module', plugins: [...plugins] })
     } catch (ex) {
         console.error(ex)
         return null

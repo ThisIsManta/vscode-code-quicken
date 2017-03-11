@@ -66,7 +66,7 @@
                     "default": [
                         {
                             "path": "**/*.js",
-                            "code": "import ${hasDefaultExport ? '' : '* as '}${_.startCase(fileName).replace(/\\s/g, '')} from '${filePath}';\n",
+                            "code": "import ${hasDefaultExport ? '' : '* as '}${getProperVariableName(fileName)} from '${filePath}';\n",
                             "insertAt": "beforeFirstImport"
                         },
                         {
