@@ -11,7 +11,7 @@ const WIN_SLASH = /\\/g
 const CURRENT_DIRX = /^\.\//
 
 const fileCache = new Map<string, object>()
-let nodeCache = []
+const nodeCache = new Map<string, object>()
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
@@ -19,20 +19,21 @@ export function activate(context: vscode.ExtensionContext) {
         path: string | Array<string>,
         code: string | string[],
         when?: string,
-        isMatch: (string) => boolean,
+        matchPath: (string) => boolean,
+        matchCondition: (object) => boolean,
         interpolate: (object) => string,
         omitExtensionInFilePath: boolean | string,
         insertAt: string,
         inclusion: Array<string>,
-        exclusion: Array<string>
+        exclusion: Array<string>,
     }>
     const nodePatterns = config.get('nodes', []) as Array<{
         name: string,
         code: string | string[],
         when?: string,
-        exec: (string) => boolean,
-        temp: (object) => string,
-        insertAt: string
+        matchName: (string) => boolean,
+        interpolate: (object) => string,
+        insertAt: string,
     }>
     const insertAt = config.get('insertAt') as string
     const parsingPlugins = config.get('javascript.parser.plugins') as Array<string>
@@ -41,86 +42,73 @@ export function activate(context: vscode.ExtensionContext) {
         const multiPaths = typeof pattern.path === 'string' ? [pattern.path as string] : (pattern.path as Array<string>)
         pattern.inclusion = multiPaths.filter(item => item.startsWith('!') === false)
         pattern.exclusion = _.difference(multiPaths, pattern.inclusion).map(item => _.trimStart(item, '!'))
-        pattern.isMatch = (givenPath: string) => {
+
+        pattern.matchPath = (givenPath: string) => {
             const matcher = (glob) => match([givenPath], glob).length > 0
             return pattern.inclusion.some(matcher) && !pattern.exclusion.some(matcher)
         }
+
+        pattern.matchCondition = ({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension }) => {
+            if (pattern.when) {
+                try {
+                    return _.template('${' + pattern.when + '}')({
+                        rootPath: currentRootPath.replace(WIN_SLASH, '/'),
+                        filePath: currentFilePath.replace(WIN_SLASH, '/'),
+                        fileName: currentFileNameWithoutExtn,
+                        fileExtn: currentFileExtension,
+                        // codeTree: currentCodeTree,
+                        // findInCodeTree: (target) => findInCodeTree(currentCodeTree, target),
+                    }) === 'true'
+                } catch (ex) {
+                    console.error(ex)
+                    return false
+                }
+            }
+            return true
+        }
+
         pattern.interpolate = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
     })
     nodePatterns.forEach(pattern => {
-        pattern.exec = (givenPath: string) => match([givenPath], pattern.name).length > 0
-        pattern.temp = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
-    })
+        pattern.matchName = (givenPath: string) => match([givenPath], pattern.name).length > 0
 
-    if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
-        const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
-        nodeCache = _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
-            .flatten<string>()
-            .sortBy()
-            .map(nodeName => {
-                try {
-                    const packageJson = require(path.join(vscode.workspace.rootPath, 'node_modules', nodeName, 'package.json'))
-                    if (packageJson.version) {
-                        return { name: nodeName, vers: packageJson.version as string }
-                    } else {
-                        return null
-                    }
-                } catch (ex) {
-                    return null
-                }
-            })
-            .compact()
-            .map(nodeModule => {
-                const pattern = nodePatterns.find(pattern => pattern.exec(nodeModule.name))
-                if (pattern) {
-                    return { ...nodeModule, temp: pattern.temp }
-                } else {
-                    return null
-                }
-            })
-            .compact()
-            .map(nodeModule => ({
-                label: nodeModule.name,
-                description: nodeModule.vers,
-                type: 'node',
-                name: nodeModule.name,
-                temp: nodeModule.temp,
-            }))
-            .value()
-    }
+        pattern.interpolate = _.template(_.isArray(pattern.code) ? pattern.code.join('\n') : pattern.code)
+    })
 
     let disposable = vscode.commands.registerCommand('haste', async () => {
         const currentDocument = vscode.window.activeTextEditor.document
         const currentRootPath = vscode.workspace.rootPath
-
         const currentFilePath = currentDocument.fileName
-        const currentFileExtn = path.extname(currentFilePath).replace(/^\./, '')
-        const currentFileNameWithoutExtn = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtn + '$', 'i'), '')
+        const currentFileExtension = path.extname(currentFilePath).replace(/^\./, '')
+        const currentFileNameWithoutExtn = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtension + '$', 'i'), '')
         const currentFileDirx = path.dirname(currentFilePath)
 
         let items = []
 
-        const distinctFilePatterns = _.uniqBy(filePatterns, 'path')
-        for (let index = 0; index < distinctFilePatterns.length; index++) {
-            const pattern = distinctFilePatterns[index]
+        const applicableFilePatterns = filePatterns.filter(pattern => pattern.matchCondition({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension }))
+        for (let index = 0; index < applicableFilePatterns.length; index++) {
+            const pattern = applicableFilePatterns[index]
             const files = await vscode.workspace.findFiles(
                 pattern.inclusion.length === 1 ? pattern.inclusion[0] : ('{' + pattern.inclusion.join(',') + '}'),
                 pattern.exclusion.length === 0 ? null : (pattern.exclusion.length === 1 ? pattern.exclusion[0] : ('{' + pattern.exclusion.join(',') + '}')),
                 9000
             )
             _.chain(files)
-                .map(file => {
-                    if (fileCache.has(file.fsPath) === false) {
-                        fileCache.set(file.fsPath, {
-                            label: path.basename(file.path),
-                            description: _.trimStart(file.fsPath.replace(currentRootPath, '').replace(WIN_SLASH, '/'), '/'),
+                .map(fileInfo => {
+                    if (fileCache.has(fileInfo.fsPath) === false) {
+                        const fileName = path.basename(fileInfo.path)
+                        const directoryName = _.last(path.dirname(fileInfo.path).split('/'))
+                        fileCache.set(fileInfo.fsPath, {
+                            label: fileName === 'index.js' && directoryName || fileName,
+                            description: _.trimStart(fileInfo.fsPath.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'),
                             type: 'file',
-                            path: file.fsPath,
+                            path: fileInfo.fsPath,
+                            unix: fileInfo.path,
                         })
                     }
-                    return fileCache.get(file.fsPath)
+                    return fileCache.get(fileInfo.fsPath)
                 })
-                .sortBy((item: any) => getRelativePath(currentFileDirx, item.path).replace(CURRENT_DIRX, '*'))
+                .sortBy((item: any) => getRelativePath(item.path, currentFileDirx).replace(CURRENT_DIRX, '*'))
                 .forEach((item: any) => {
                     if (item.path !== currentFilePath) {
                         items.push(item)
@@ -129,7 +117,41 @@ export function activate(context: vscode.ExtensionContext) {
                 .value()
         }
 
-        items = items.concat(nodeCache)
+        if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
+            const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
+            _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
+                .flatten<string>()
+                .map(nodeName => {
+                    if (nodeCache.has(nodeName) === false) {
+                        let nodeVersion = ''
+                        try {
+                            const packageJson = require(path.join(vscode.workspace.rootPath, 'node_modules', nodeName, 'package.json'))
+                            if (packageJson.version) {
+                                nodeVersion = packageJson.version
+                            }
+                        } catch (ex) { }
+
+                        const pattern = nodePatterns.find(pattern => pattern.matchName(nodeName))
+                        if (pattern) {
+                            nodeCache.set(nodeName, {
+                                label: nodeName,
+                                description: nodeVersion,
+                                type: 'node',
+                                name: nodeName,
+                            })
+                        } else {
+                            return null
+                        }
+                    }
+                    return nodeCache.get(nodeName)
+                })
+                .compact()
+                .sortBy('name')
+                .forEach(item => {
+                    items.push(item)
+                })
+                .value()
+        }
 
         const editor = vscode.window.activeTextEditor
         if (!editor) {
@@ -141,7 +163,7 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        const currentCodeTree = /(js|ts)/.test(currentFileExtn) ? getCodeTree(currentDocument.getText(), parsingPlugins) : null
+        const currentCodeTree = /(js|ts)/.test(currentFileExtension) ? getCodeTree(currentDocument.getText(), parsingPlugins) : null
         let existingImportItems = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
             existingImportItems = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
@@ -150,7 +172,7 @@ export function activate(context: vscode.ExtensionContext) {
         let code = ''
         let insertAt: string
         if (select.type === 'node') {
-            const pattern = nodePatterns.find(pattern => pattern.exec(select.name))
+            const pattern = nodePatterns.find(pattern => pattern.matchName(select.name))
 
             insertAt = pattern.insertAt
 
@@ -159,58 +181,43 @@ export function activate(context: vscode.ExtensionContext) {
                 return null
             }
 
-            code = pattern.temp({
+            code = pattern.interpolate({
                 _, // Lodash
                 nodeName: select.name,
             })
 
         } else if (select.type === 'file') {
-            const selectFileExtn = path.extname(select.path).replace(/^\./, '')
-            const selectFileNameWithoutExtn = path.basename(select.path).replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
+            const selectFileExtension = path.extname(select.path).replace(/^\./, '')
+            const selectFileNameWithExtension = path.basename(select.path)
+            const selectFileNameWithoutExtension = selectFileNameWithExtension.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
             const selectCodeText = fs.readFileSync(select.path, 'utf-8')
-            const selectCodeTree = /(js|ts)/.test(currentFileExtn) ? getCodeTree(selectCodeText, parsingPlugins) : null
+            const selectCodeTree = /(js|ts)/.test(currentFileExtension) ? getCodeTree(selectCodeText, parsingPlugins) : null
 
-            const pattern = filePatterns.find(pattern => {
-                if (pattern.isMatch(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'))) {
-                    if (pattern.when) {
-                        try {
-                            return _.template('${' + pattern.when + '}')({
-                                rootPath: currentRootPath,
-                                filePath: currentFilePath,
-                                fileName: currentFileNameWithoutExtn,
-                                fileExtn: currentFileExtn,
-                                codeTree: currentCodeTree,
-                                findInCodeTree: (target) => findInCodeTree(getCodeTree, target),
-                            }) === 'true'
-                        } catch (ex) {
-                            console.error(ex)
-                            return false
-                        }
-                    } else {
-                        return true
-                    }
-                }
-                return false
-            })
+            const pattern = filePatterns.find(pattern =>
+                pattern.matchPath(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/')) &&
+                pattern.matchCondition({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension, })
+            )
 
             insertAt = pattern.insertAt
 
-            let selectRelativePath = getRelativePath(currentFileDirx, select.path)
-            if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtn)) {
-                selectRelativePath = selectRelativePath.replace(new RegExp('\\.' + selectFileExtn + '$', 'i'), '')
+            let selectRelativeFilePath = getRelativePath(select.path, currentFileDirx)
+            if (selectFileNameWithExtension === 'index.js') {
+                selectRelativeFilePath = _.trimEnd(selectRelativeFilePath.substring(0, selectRelativeFilePath.length - selectFileNameWithExtension.length), '/')
+            } else if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtension)) {
+                selectRelativeFilePath = selectRelativeFilePath.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
             }
 
-            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativePath)) {
-                vscode.window.showErrorMessage(`The file '${selectRelativePath}' has been already imported.`)
+            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
+                vscode.window.showErrorMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                 return null
             }
 
             code = pattern.interpolate({
                 _, // Lodash
-                fullPath: select.path,
-                filePath: selectRelativePath,
-                fileName: selectFileNameWithoutExtn,
-                fileExtn: selectFileExtn,
+                fullPath: select.unix,
+                filePath: selectRelativeFilePath,
+                fileName: selectFileNameWithoutExtension,
+                fileExtn: selectFileExtension,
                 codeText: selectCodeText,
                 codeTree: selectCodeTree,
                 hasExportDefault: selectCodeTree === null || findInCodeTree(selectCodeTree, { type: 'ExportDefaultDeclaration' }) !== undefined,
@@ -249,11 +256,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
     fileCache.clear()
-    nodeCache = []
+    nodeCache.clear()
 }
 
-function getRelativePath(currentPath, anotherPath) {
-    let relativePath = path.relative(currentPath, anotherPath).replace(WIN_SLASH, '/')
+function getRelativePath(givenPath, rootPath) {
+    let relativePath = path.relative(rootPath, givenPath).replace(WIN_SLASH, '/')
     if (relativePath.startsWith('../') === false) {
         relativePath = './' + relativePath
     }
