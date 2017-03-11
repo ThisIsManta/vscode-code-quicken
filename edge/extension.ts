@@ -7,6 +7,7 @@ import * as babylon from 'babylon'
 
 const PATH_DELIMITOR_FOR_WINDOWS = /\\/g
 const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
+const UPPER_DIRECTORY_SEMANTIC = /\.\.\//g
 const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
 const MODULE_EXPORTS = {
     type: 'ExpressionStatement',
@@ -66,8 +67,6 @@ export function activate(context: vscode.ExtensionContext) {
                         filePath: currentFilePath.replace(PATH_DELIMITOR_FOR_WINDOWS, '/'),
                         fileName: currentFileNameWithoutExtn,
                         fileExtn: currentFileExtension,
-                        // codeTree: currentCodeTree,
-                        // findInCodeTree: (target) => findInCodeTree(currentCodeTree, target),
                     }) === 'true'
                 } catch (ex) {
                     console.error(ex)
@@ -91,7 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
         const currentFilePath = currentDocument.fileName
         const currentFileExtension = path.extname(currentFilePath).replace(/^\./, '')
         const currentFileNameWithoutExtn = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtension + '$', 'i'), '')
-        const currentFileDirx = path.dirname(currentFilePath)
+        const currentDirectory = path.dirname(currentFilePath)
 
         let items = []
 
@@ -104,22 +103,38 @@ export function activate(context: vscode.ExtensionContext) {
                 9000
             )
             _.chain(files)
-                .map(fileInfo => {
+                .map<any>((fileInfo: vscode.Uri) => {
                     if (fileCache.has(fileInfo.fsPath) === false) {
+                        // Create a QuickPickItem
+                        // See also https://code.visualstudio.com/docs/extensionAPI/vscode-api#_a-namequickpickitemaspan-classcodeitem-id445quickpickitemspan
                         const fileName = path.basename(fileInfo.path)
                         const directoryName = _.last(path.dirname(fileInfo.path).split('/'))
                         fileCache.set(fileInfo.fsPath, {
                             label: fileName === 'index.js' && directoryName || fileName,
-                            description: _.trimStart(fileInfo.fsPath.substring(currentRootPath.length).replace(PATH_DELIMITOR_FOR_WINDOWS, '/'), '/'),
+                            description: _.trim(path.dirname(fileInfo.fsPath.substring(currentRootPath.length)), path.sep),
+                            // Additional data
                             type: 'file',
                             path: fileInfo.fsPath,
                             unix: fileInfo.path,
+                            dirx: path.dirname(fileInfo.fsPath),
+                            iden: fileName === 'index.js' ? '!' : fileName.toLowerCase(),
+                            freq: 0,
                         })
                     }
                     return fileCache.get(fileInfo.fsPath)
-                })
-                .sortBy((item: any) => getRelativePath(item.path, currentFileDirx).replace(CURRENT_DIRECTORY_SEMANTIC, '*'))
-                .forEach((item: any) => {
+                }).forEach(item => {
+                    if (item.dirx === currentDirectory) {
+                        item.rank = 'a'
+                    } else {
+                        item.rank = getRelativePath(item.path, currentDirectory).split('/').map((chunk, index, array) => {
+                            if (chunk === '.') return 'b'
+                            else if (chunk === '..') return 'e'
+                            else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'c'
+                            else if (index === array.length - 1) return 'z'
+                            return 'd'
+                        }).join('')
+                    }
+
                     if (item.path !== currentFilePath) {
                         items.push(item)
                     }
@@ -127,11 +142,15 @@ export function activate(context: vscode.ExtensionContext) {
                 .value()
         }
 
+        if (items.length > 0) {
+            items = _.sortBy(items, 'rank', 'freq', 'iden')
+        }
+
         if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
             const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
             _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
                 .flatten<string>()
-                .map(nodeName => {
+                .map<any>(nodeName => {
                     if (nodeCache.has(nodeName) === false) {
                         let nodeVersion = ''
                         try {
@@ -145,7 +164,7 @@ export function activate(context: vscode.ExtensionContext) {
                         if (pattern) {
                             nodeCache.set(nodeName, {
                                 label: nodeName,
-                                description: nodeVersion,
+                                description: 'v' + nodeVersion,
                                 type: 'node',
                                 name: nodeName,
                             })
@@ -212,7 +231,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             insertAt = pattern.insertAt
 
-            let selectRelativeFilePath = getRelativePath(select.path, currentFileDirx)
+            let selectRelativeFilePath = getRelativePath(select.path, currentDirectory)
             if (selectFileNameWithExtension === 'index.js') {
                 selectRelativeFilePath = _.trimEnd(selectRelativeFilePath.substring(0, selectRelativeFilePath.length - selectFileNameWithExtension.length), '/')
             } else if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtension)) {
@@ -237,6 +256,10 @@ export function activate(context: vscode.ExtensionContext) {
                 hasDefaultExport: selectCodeTree === null || findInCodeTree(selectCodeTree, EXPORT_DEFAULT) !== undefined || findInCodeTree(selectCodeTree, MODULE_EXPORTS),
                 findInCodeTree: (target) => findInCodeTree(selectCodeTree, target),
             })
+        }
+
+        if (_.isNumber(select.freq)) {
+            select.freq += 1
         }
 
         editor.edit(worker => {
