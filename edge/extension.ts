@@ -282,13 +282,25 @@ function getRelativePath(givenPath: string, rootPath: string) {
 }
 
 function getProperVariableName(fileName: string) {
-    const signs = _.get(fileName.match(/^(\W)*[_\$]+/), '0', '')
-    let title = _.startCase(fileName).replace(/\s/g, '')
-    if (signs.length === 0 && /^\d*/.test(fileName)) {
-        const digits = title.match(/^\d*/)[0]
-        title = title.substring(digits.length) + digits
+    const words = _.words(fileName)
+
+    let pivot = 0
+    let parts = []
+    words.forEach(word => {
+        const index = fileName.indexOf(word, pivot)
+        parts.push((fileName.substring(pivot, index).match(/[_\$]+/g) || []).join(''))
+        parts.push(_.upperFirst(word))
+    })
+
+    parts = _.compact(parts)
+
+    if (/^\d+/.test(parts[0])) {
+        const digit = parts[0].match(/^\d+/)[0]
+        parts[0] = parts[0].substring(digit.length)
+        parts.push(digit)
     }
-    return signs + title
+
+    return parts.join('')
 }
 
 function getCodeTree(codeText: string, plugins = []): any {
