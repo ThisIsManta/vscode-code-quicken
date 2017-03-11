@@ -1,5 +1,3 @@
-/// <reference types="babel-types" />
-
 import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -7,8 +5,20 @@ import * as _ from 'lodash'
 import { match } from 'minimatch'
 import * as babylon from 'babylon'
 
-const WIN_SLASH = /\\/g
-const CURRENT_DIRX = /^\.\//
+const PATH_DELIMITOR_FOR_WINDOWS = /\\/g
+const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
+const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
+const MODULE_EXPORT = {
+    type: 'ExpressionStatement',
+    expression: {
+        type: 'AssignmentExpression',
+        left: {
+            type: 'MemberExpression',
+            object: { type: 'Identifier', name: 'module' },
+            property: { type: 'Identifier', name: 'exports' }
+        }
+    }
+}
 
 const fileCache = new Map<string, object>()
 const nodeCache = new Map<string, object>()
@@ -52,8 +62,8 @@ export function activate(context: vscode.ExtensionContext) {
             if (pattern.when) {
                 try {
                     return _.template('${' + pattern.when + '}')({
-                        rootPath: currentRootPath.replace(WIN_SLASH, '/'),
-                        filePath: currentFilePath.replace(WIN_SLASH, '/'),
+                        rootPath: currentRootPath.replace(PATH_DELIMITOR_FOR_WINDOWS, '/'),
+                        filePath: currentFilePath.replace(PATH_DELIMITOR_FOR_WINDOWS, '/'),
                         fileName: currentFileNameWithoutExtn,
                         fileExtn: currentFileExtension,
                         // codeTree: currentCodeTree,
@@ -100,7 +110,7 @@ export function activate(context: vscode.ExtensionContext) {
                         const directoryName = _.last(path.dirname(fileInfo.path).split('/'))
                         fileCache.set(fileInfo.fsPath, {
                             label: fileName === 'index.js' && directoryName || fileName,
-                            description: _.trimStart(fileInfo.fsPath.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/'),
+                            description: _.trimStart(fileInfo.fsPath.substring(currentRootPath.length).replace(PATH_DELIMITOR_FOR_WINDOWS, '/'), '/'),
                             type: 'file',
                             path: fileInfo.fsPath,
                             unix: fileInfo.path,
@@ -108,7 +118,7 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                     return fileCache.get(fileInfo.fsPath)
                 })
-                .sortBy((item: any) => getRelativePath(item.path, currentFileDirx).replace(CURRENT_DIRX, '*'))
+                .sortBy((item: any) => getRelativePath(item.path, currentFileDirx).replace(CURRENT_DIRECTORY_SEMANTIC, '*'))
                 .forEach((item: any) => {
                     if (item.path !== currentFilePath) {
                         items.push(item)
@@ -194,7 +204,7 @@ export function activate(context: vscode.ExtensionContext) {
             const selectCodeTree = /(js|ts)/.test(currentFileExtension) ? getCodeTree(selectCodeText, parsingPlugins) : null
 
             const pattern = filePatterns.find(pattern =>
-                pattern.matchPath(_.trimStart(select.path.substring(currentRootPath.length).replace(WIN_SLASH, '/'), '/')) &&
+                pattern.matchPath(_.trimStart(select.path.substring(currentRootPath.length).replace(PATH_DELIMITOR_FOR_WINDOWS, '/'), '/')) &&
                 pattern.matchCondition({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension, })
             )
 
@@ -220,7 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
                 fileExtn: selectFileExtension,
                 codeText: selectCodeText,
                 codeTree: selectCodeTree,
-                hasExportDefault: selectCodeTree === null || findInCodeTree(selectCodeTree, { type: 'ExportDefaultDeclaration' }) !== undefined,
+                hasDefaultExport: selectCodeTree === null || findInCodeTree(selectCodeTree, EXPORT_DEFAULT) !== undefined || findInCodeTree(selectCodeTree, MODULE_EXPORT),
                 findInCodeTree: (target) => findInCodeTree(getCodeTree, target),
             })
         }
@@ -260,7 +270,7 @@ export function deactivate() {
 }
 
 function getRelativePath(givenPath, rootPath) {
-    let relativePath = path.relative(rootPath, givenPath).replace(WIN_SLASH, '/')
+    let relativePath = path.relative(rootPath, givenPath).replace(PATH_DELIMITOR_FOR_WINDOWS, '/')
     if (relativePath.startsWith('../') === false) {
         relativePath = './' + relativePath
     }
@@ -279,24 +289,27 @@ function getCodeTree(text, plugins = []): any {
     }
 }
 
-function findInCodeTree(branch: object, target: object) {
-    if (branch === null) {
+function findInCodeTree(source: object, target: object) {
+    if (source === null) {
         return undefined
 
-    } else if (_.isMatch(branch, target)) {
-        return target
+    } else if (source['type'] === 'File' && source['program']) {
+        return findInCodeTree(source['program'], target)
 
-    } else if (_.isArrayLike(branch['body'])) {
-        for (let index = 0; index < branch['body'].length; index++) {
-            const result = findInCodeTree(branch['body'][index], target)
+    } else if (_.isMatch(source, target)) {
+        return source
+
+    } else if (_.isArrayLike(source['body'])) {
+        for (let index = 0; index < source['body'].length; index++) {
+            const result = findInCodeTree(source['body'][index], target)
             if (result !== undefined) {
                 return result
             }
         }
         return undefined
 
-    } else if (_.isObject(branch['body'])) {
-        return findInCodeTree(branch['body'], target)
+    } else if (_.isObject(source['body'])) {
+        return findInCodeTree(source['body'], target)
 
     } else {
         return undefined
