@@ -7,47 +7,53 @@ import * as Shared from './Shared'
 import FileInfo from './FileInfo'
 
 export default class FilePattern {
-	path: string | Array<string>
-	code: string | string[]
-	when?: string
-	interpolate: (object) => string
-	omitIndexFile: boolean
-	omitExtensionInFilePath: boolean | string
-	insertAt: string
+	private config: FileConfiguration
 	private inclusion: Array<string>
 	private exclusion: Array<string>
+	readonly inclusionPath: string
+	readonly exclusionPath: string = null
+	readonly omitExtensions: string = null
+	readonly interpolate: (object) => string
 
-	constructor() {
-		const multiPaths = typeof this.path === 'string' ? [this.path as string] : (this.path as Array<string>)
+	get insertAt() {
+		return this.config.insertAt
+	}
+
+	get omitIndexFile() {
+		return this.config.omitIndexFile
+	}
+
+	constructor(config: FileConfiguration) {
+		this.config = config
+
+		const multiPaths = typeof config.path === 'string' ? [config.path as string] : (config.path as Array<string>)
 		this.inclusion = multiPaths.filter(item => item.startsWith('!') === false)
 		this.exclusion = _.difference(multiPaths, this.inclusion).map(item => _.trimStart(item, '!'))
-
-		this.interpolate = _.template(_.isArray(this.code) ? this.code.join('\n') : this.code)
-	}
-
-	get inclusionPath(): string {
 		if (this.inclusion.length === 1) {
-			return this.inclusion[0]
+			this.inclusionPath = this.inclusion[0]
 		} else {
-			return '{' + this.inclusion.join(',') + '}'
+			this.inclusionPath = '{' + this.inclusion.join(',') + '}'
 		}
-	}
+		if (this.exclusion.length === 1) {
+			this.exclusionPath = this.exclusion[0]
+		} else if (this.exclusion.length > 1) {
+			this.exclusionPath = '{' + this.exclusion.join(',') + '}'
+		}
 
-	get exclusionPath(): string {
-		if (this.exclusion.length === 0) {
-			return null
-		} else if (this.exclusion.length === 1) {
-			return this.exclusion[0]
-		} else {
-			return '{' + this.exclusion.join(',') + '}'
+		if (config.omitExtensionInFilePath === true) {
+			this.omitExtensions = '*'
+		} else if (typeof config.omitExtensionInFilePath === 'string') {
+			this.omitExtensions = config.omitExtensionInFilePath
 		}
+
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join('\n') : config.code)
 	}
 
 	check(document: vscode.TextDocument): boolean {
-		if (this.when) {
+		if (this.config.when) {
 			const fileInfo = new FileInfo(document.fileName)
 			try {
-				return Boolean(_.template('${' + this.when + '}')({
+				return Boolean(_.template('${' + this.config.when + '}')({
 					rootPath: (vscode.workspace.rootPath || '').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'),
 					filePath: fileInfo.unixPath,
 					fileName: fileInfo.fileNameWithoutExtension,
@@ -66,4 +72,5 @@ export default class FilePattern {
 		const matcher = (glob) => minimatch([givenPath], glob).length > 0
 		return this.inclusion.some(matcher) && !this.exclusion.some(matcher)
 	}
+
 }

@@ -9,31 +9,28 @@ import FilePattern from './FilePattern'
 export default class FileItem implements vscode.QuickPickItem {
 	label: string
 	description: string
-	path: string
-	unix: string
-	dirx: string
-	rank: string
-	iden: string
+	fileInfo: FileInfo
+	sortablePath: string
+	readonly sortableName: string
 
-	constructor(pattern: FilePattern, fileLink: vscode.Uri) {
-		const fileInfo = new FileInfo(fileLink.fsPath)
+	constructor(fileLink: vscode.Uri, pattern: FilePattern) {
+		this.fileInfo = new FileInfo(fileLink.fsPath)
 
-		this.label = pattern.omitIndexFile && fileInfo.fileNameWithoutExtension === 'index' && fileInfo.directoryName || fileInfo.fileNameWithExtension
+		this.label = this.fileInfo.fileNameWithoutExtension === 'index' && this.fileInfo.directoryName || this.fileInfo.fileNameWithExtension
 		this.description = _.trim(path.dirname(fileLink.fsPath.substring(vscode.workspace.rootPath.length)), path.sep)
 
-		this.path = fileInfo.localPath
-		this.unix = fileInfo.unixPath
-		this.dirx = path.dirname(fileLink.fsPath)
-		this.iden = fileInfo.fileNameWithoutExtension === 'index' ? '!' : fileInfo.fileNameWithExtension.toLowerCase()
+		this.sortableName = this.fileInfo.fileNameWithoutExtension === 'index' ? '!' : this.fileInfo.fileNameWithExtension.toLowerCase()
 	}
 
-	updateRank(currentDirectoryPath: string) {
-		if (vscode.workspace.textDocuments.find(document => document.fileName === this.path) !== undefined) {
-			this.rank = 'a'
-		} else if (this.dirx === currentDirectoryPath) {
-			this.rank = 'b'
+	updateSortablePath(currentDirectoryPath: string) {
+		if (vscode.workspace.textDocuments.find(document => document.fileName === this.fileInfo.localPath) !== undefined) {
+			this.sortablePath = 'a'
+
+		} else if (this.fileInfo.directoryPath === currentDirectoryPath) {
+			this.sortablePath = 'b'
+
 		} else {
-			this.rank = FileInfo.getRelativePath(this.path, currentDirectoryPath).split('/').map((chunk, index, array) => {
+			this.sortablePath = FileInfo.getRelativePath(this.fileInfo.localPath, currentDirectoryPath).split('/').map((chunk, index, array) => {
 				if (chunk === '.') return 'c'
 				else if (chunk === '..') return 'f'
 				else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'd'
@@ -41,5 +38,16 @@ export default class FileItem implements vscode.QuickPickItem {
 				return 'e'
 			}).join('')
 		}
+	}
+
+	getRelativeFilePath(currentDirectoryPath: string, pattern: FilePattern) {
+		let relativeFilePath = FileInfo.getRelativePath(this.fileInfo.localPath, currentDirectoryPath)
+		if (pattern.omitIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
+			relativeFilePath = _.trimEnd(relativeFilePath.substring(0, relativeFilePath.length - this.fileInfo.fileNameWithExtension.length), '/')
+
+		} else if (pattern.omitExtensions && minimatch([this.fileInfo.fileExtensionWithoutLeadingDot], pattern.omitExtensions).length > 0) {
+			relativeFilePath = relativeFilePath.substring(0, relativeFilePath.length - 1 - this.fileInfo.fileExtensionWithoutLeadingDot.length)
+		}
+		return relativeFilePath
 	}
 }

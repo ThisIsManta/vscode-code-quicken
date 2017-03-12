@@ -2,17 +2,20 @@ import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
 export default class NodePattern {
-	name: string
-	code: string | string[]
-	when?: string
-	interpolate: (object) => string
-	insertAt: string
+	private config: NodeConfiguration
+	readonly interpolate: (object) => string
 
-	constructor() {
-		this.interpolate = _.template(_.isArray(this.code) ? this.code.join('\n') : this.code)
+	get insertAt() {
+		return this.config.insertAt
+	}
+
+	constructor(config: NodeConfiguration) {
+		this.config = config
+
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join('\n') : config.code)
 	}
 
 	match(givenPath: string): boolean {
-		return minimatch([givenPath], this.name).length > 0
+		return minimatch([givenPath], this.config.name).length > 0
 	}
 }

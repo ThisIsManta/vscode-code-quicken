@@ -5,7 +5,6 @@ import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
 import * as Shared from './Shared'
-import { getProperVariableName, getCodeTree, findInCodeTree } from './Shared'
 import FileInfo from './FileInfo'
 import FilePattern from './FilePattern'
 import NodePattern from './NodePattern'
@@ -17,10 +16,9 @@ const nodeCache = new Map<string, NodeItem>()
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get('files', []) as Array<FilePattern>
+    const filePatterns = config.get<Array<FilePattern>>('files', [])
     const nodePatterns = config.get('nodes', []) as Array<NodePattern>
-    const insertAt = config.get('insertAt') as string
-    const parsingPlugins = config.get('javascript.parser.plugins') as Array<string>
+    const parserPlugins = config.get('javascript.parser.plugins') as Array<string>
 
     let disposable = vscode.commands.registerCommand('haste', async () => {
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
@@ -34,20 +32,21 @@ export function activate(context: vscode.ExtensionContext) {
 
         let items: Array<vscode.QuickPickItem> = []
 
+        // Add files
         const applicableFilePatterns = filePatterns.filter(pattern => (console.log(pattern), pattern.check(currentDocument)))
         for (let index = 0; index < applicableFilePatterns.length; index++) {
             const pattern = applicableFilePatterns[index]
             const files = await vscode.workspace.findFiles(pattern.inclusionPath, pattern.exclusionPath, 9000)
 
-            files.map(fileInfo => {
-                if (fileCache.has(fileInfo.fsPath) === false) {
-                    fileCache.set(fileInfo.fsPath, new FileItem(pattern, fileInfo))
+            files.map(fileLink => {
+                if (fileCache.has(fileLink.fsPath) === false) {
+                    fileCache.set(fileLink.fsPath, new FileItem(fileLink, pattern))
                 }
-                return fileCache.get(fileInfo.fsPath)
+                return fileCache.get(fileLink.fsPath)
             }).forEach(item => {
-                item.updateRank(currentFileInfo.directoryPath)
+                item.updateSortablePath(currentFileInfo.directoryPath)
 
-                if (item.path !== currentFileInfo.localPath) {
+                if (item.fileInfo.localPath !== currentFileInfo.localPath) {
                     items.push(item)
                 }
             })
@@ -57,8 +56,8 @@ export function activate(context: vscode.ExtensionContext) {
         if (items.length > 0) {
             items = _.uniq(items)
             items = _.sortBy(items, [
-                (item: FileItem) => item.rank,
-                (item: FileItem) => item.iden,
+                (item: FileItem) => item.sortablePath,
+                (item: FileItem) => item.sortableName,
             ])
         }
 
@@ -97,7 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        const currentCodeTree = getCodeTree(currentDocument.getText(), currentDocument.languageId, parsingPlugins)
+        const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, parserPlugins)
         let existingImportItems = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
             existingImportItems = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
@@ -119,29 +118,20 @@ export function activate(context: vscode.ExtensionContext) {
                 _, // Lodash
                 minimatch,
                 nodeName: select.name,
-                getProperVariableName,
+                ...Shared,
             })
 
         } else if (select instanceof FileItem) {
-            const selectFileExtension = path.extname(select.path).replace(/^\./, '')
-            const selectFileNameWithExtension = path.basename(select.path)
-            const selectFileNameWithoutExtension = selectFileNameWithExtension.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
-            const selectCodeText = fs.readFileSync(select.path, 'utf-8')
-            const selectCodeTree = getCodeTree(selectCodeText, selectFileExtension, parsingPlugins)
-
             const pattern = filePatterns.find(pattern =>
-                pattern.match(_.trimStart(select.path.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')) &&
+                pattern.match(_.trimStart(select.fileInfo.localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')) &&
                 pattern.check(currentDocument)
-            )
+            ) as FilePattern
 
             insertAt = pattern.insertAt
 
-            let selectRelativeFilePath = FileInfo.getRelativePath(select.path, currentFileInfo.directoryPath)
-            if (pattern.omitIndexFile && Shared.INDEX_FILE.test(selectFileNameWithExtension)) {
-                selectRelativeFilePath = _.trimEnd(selectRelativeFilePath.substring(0, selectRelativeFilePath.length - selectFileNameWithExtension.length), '/')
-            } else if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtension)) {
-                selectRelativeFilePath = selectRelativeFilePath.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
-            }
+            const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
+            const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, parserPlugins)
+            const selectRelativeFilePath = select.getRelativeFilePath(currentFileInfo.directoryPath, pattern)
 
             if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
                 vscode.window.showErrorMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
@@ -151,15 +141,15 @@ export function activate(context: vscode.ExtensionContext) {
             code = pattern.interpolate({
                 _, // Lodash
                 minimatch,
-                fullPath: select.unix,
+                fullPath: select.fileInfo.unixPath,
                 filePath: selectRelativeFilePath,
-                fileName: selectFileNameWithoutExtension,
-                fileExtn: selectFileExtension,
-                getProperVariableName,
+                fileName: select.fileInfo.fileNameWithoutExtension,
+                fileExtn: select.fileInfo.fileNameWithExtension,
                 codeText: selectCodeText,
                 codeTree: selectCodeTree,
-                hasDefaultExport: selectCodeTree === null || findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS),
-                findInCodeTree: (target) => findInCodeTree(selectCodeTree, target),
+                hasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS),
+                ...Shared,
+                findInCodeTree: (target) => Shared.findInCodeTree(selectCodeTree, target),
             })
         }
 
