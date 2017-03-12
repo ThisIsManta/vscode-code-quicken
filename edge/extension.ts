@@ -8,6 +8,7 @@ import * as babylon from 'babylon'
 const PATH_DELIMITOR_FOR_WINDOWS = /\\/g
 const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
 const UPPER_DIRECTORY_SEMANTIC = /\.\.\//g
+const INDEX_FILE = /^index\.\w+$/i
 const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
 const MODULE_EXPORTS = {
     type: 'ExpressionStatement',
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
         matchPath: (string) => boolean,
         matchCondition: (object) => boolean,
         interpolate: (object) => string,
+        omitIndexFile: boolean,
         omitExtensionInFilePath: boolean | string,
         insertAt: string,
         inclusion: Array<string>,
@@ -59,15 +61,16 @@ export function activate(context: vscode.ExtensionContext) {
             return pattern.inclusion.some(matcher) && !pattern.exclusion.some(matcher)
         }
 
-        pattern.matchCondition = ({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension }) => {
+        pattern.matchCondition = ({ currentDocument, currentRootPath, currentFilePath, currentFileNameWithoutExtension, currentFileExtension }) => {
             if (pattern.when) {
                 try {
-                    return _.template('${' + pattern.when + '}')({
+                    return Boolean(_.template('${' + pattern.when + '}')({
                         rootPath: currentRootPath.replace(PATH_DELIMITOR_FOR_WINDOWS, '/'),
                         filePath: currentFilePath.replace(PATH_DELIMITOR_FOR_WINDOWS, '/'),
-                        fileName: currentFileNameWithoutExtn,
+                        fileName: currentFileNameWithoutExtension,
                         fileExtn: currentFileExtension,
-                    }) === 'true'
+                        fileType: currentDocument.languageId,
+                    }))
                 } catch (ex) {
                     console.error(ex)
                     return false
@@ -89,12 +92,11 @@ export function activate(context: vscode.ExtensionContext) {
         const currentRootPath = vscode.workspace.rootPath
         const currentFilePath = currentDocument.fileName
         const currentFileExtension = path.extname(currentFilePath).replace(/^\./, '')
-        const currentFileNameWithoutExtn = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtension + '$', 'i'), '')
+        const currentFileNameWithoutExtension = path.basename(currentFilePath).replace(new RegExp('\\.' + currentFileExtension + '$', 'i'), '')
         const currentDirectory = path.dirname(currentFilePath)
 
         let items = []
-
-        const applicableFilePatterns = filePatterns.filter(pattern => pattern.matchCondition({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension }))
+        const applicableFilePatterns = filePatterns.filter(pattern => pattern.matchCondition({ currentDocument, currentRootPath, currentFilePath, currentFileNameWithoutExtension, currentFileExtension }))
         for (let index = 0; index < applicableFilePatterns.length; index++) {
             const pattern = applicableFilePatterns[index]
             const files = await vscode.workspace.findFiles(
@@ -110,28 +112,29 @@ export function activate(context: vscode.ExtensionContext) {
                         const fileName = path.basename(fileInfo.path)
                         const directoryName = _.last(path.dirname(fileInfo.path).split('/'))
                         fileCache.set(fileInfo.fsPath, {
-                            label: fileName === 'index.js' && directoryName || fileName,
+                            label: pattern.omitIndexFile && INDEX_FILE.test(fileName) && directoryName || fileName,
                             description: _.trim(path.dirname(fileInfo.fsPath.substring(currentRootPath.length)), path.sep),
                             // Additional data
                             type: 'file',
                             path: fileInfo.fsPath,
                             unix: fileInfo.path,
                             dirx: path.dirname(fileInfo.fsPath),
-                            iden: fileName === 'index.js' ? '!' : fileName.toLowerCase(),
-                            freq: 0,
+                            iden: INDEX_FILE.test(fileName) ? '!' : fileName.toLowerCase(),
                         })
                     }
                     return fileCache.get(fileInfo.fsPath)
                 }).forEach(item => {
-                    if (item.dirx === currentDirectory) {
+                    if (vscode.workspace.textDocuments.find(document => document.fileName === item.path) !== undefined) {
                         item.rank = 'a'
+                    } else if (item.dirx === currentDirectory) {
+                        item.rank = 'b'
                     } else {
                         item.rank = getRelativePath(item.path, currentDirectory).split('/').map((chunk, index, array) => {
-                            if (chunk === '.') return 'b'
-                            else if (chunk === '..') return 'e'
-                            else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'c'
+                            if (chunk === '.') return 'c'
+                            else if (chunk === '..') return 'f'
+                            else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'd'
                             else if (index === array.length - 1) return 'z'
-                            return 'd'
+                            return 'e'
                         }).join('')
                     }
 
@@ -143,7 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         if (items.length > 0) {
-            items = _.sortBy(items, 'rank', 'freq', 'iden')
+            items = _.sortBy(items, 'rank', 'iden')
         }
 
         if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
@@ -192,7 +195,7 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        const currentCodeTree = /(js|ts)/.test(currentFileExtension) ? getCodeTree(currentDocument.getText(), parsingPlugins) : null
+        const currentCodeTree = getCodeTree(currentDocument.getText(), currentDocument.languageId, parsingPlugins)
         let existingImportItems = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
             existingImportItems = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
@@ -222,17 +225,17 @@ export function activate(context: vscode.ExtensionContext) {
             const selectFileNameWithExtension = path.basename(select.path)
             const selectFileNameWithoutExtension = selectFileNameWithExtension.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
             const selectCodeText = fs.readFileSync(select.path, 'utf-8')
-            const selectCodeTree = /(js|ts)/.test(currentFileExtension) ? getCodeTree(selectCodeText, parsingPlugins) : null
+            const selectCodeTree = getCodeTree(selectCodeText, selectFileExtension, parsingPlugins)
 
             const pattern = filePatterns.find(pattern =>
                 pattern.matchPath(_.trimStart(select.path.substring(currentRootPath.length).replace(PATH_DELIMITOR_FOR_WINDOWS, '/'), '/')) &&
-                pattern.matchCondition({ currentRootPath, currentFilePath, currentFileNameWithoutExtn, currentFileExtension, })
+                pattern.matchCondition({ currentDocument, currentRootPath, currentFilePath, currentFileNameWithoutExtension, currentFileExtension, })
             )
 
             insertAt = pattern.insertAt
 
             let selectRelativeFilePath = getRelativePath(select.path, currentDirectory)
-            if (selectFileNameWithExtension === 'index.js') {
+            if (pattern.omitIndexFile && INDEX_FILE.test(selectFileNameWithExtension)) {
                 selectRelativeFilePath = _.trimEnd(selectRelativeFilePath.substring(0, selectRelativeFilePath.length - selectFileNameWithExtension.length), '/')
             } else if (pattern.omitExtensionInFilePath === true || typeof pattern.omitExtensionInFilePath === 'string' && pattern.omitExtensionInFilePath.toString().length > 0 && new RegExp(pattern.omitExtensionInFilePath, 'i').test(selectFileExtension)) {
                 selectRelativeFilePath = selectRelativeFilePath.replace(new RegExp('\\.' + selectFileExtension + '$', 'i'), '')
@@ -258,10 +261,6 @@ export function activate(context: vscode.ExtensionContext) {
             })
         }
 
-        if (_.isNumber(select.freq)) {
-            select.freq += 1
-        }
-
         editor.edit(worker => {
             let position: vscode.Position
             if (insertAt === 'beforeFirstImport' && existingImportItems.length > 0) {
@@ -274,7 +273,7 @@ export function activate(context: vscode.ExtensionContext) {
                 position = new vscode.Position(_.last(existingImportItems).loc.end.line, 0)
 
             } else if (insertAt === 'afterLastImport' && existingImportItems.length === 0 || insertAt === 'bottom') {
-                position = new vscode.Position(currentDocument.getText().replace(/\r/g, '').split('\n').length + 1, 0)
+                position = new vscode.Position(currentDocument.lineCount, 0)
 
             } else {
                 position = editor.selection.active
@@ -326,9 +325,12 @@ function getProperVariableName(fileName: string) {
     return parts.join('')
 }
 
-function getCodeTree(codeText: string, plugins = []): any {
+function getCodeTree(text: string, fileExtensionOrLanguageId: string, plugins = []): any {
+    if (/^(javascript|javascriptreact|js|jsx|typescript|typescriptreact|ts|tsx)$/.test(fileExtensionOrLanguageId) === false) {
+        return null
+    }
     try {
-        return babylon.parse(codeText, { sourceType: 'module', plugins: [...plugins] })
+        return babylon.parse(text, { sourceType: 'module', plugins: [...plugins] })
     } catch (ex) {
         console.error(ex)
         return null

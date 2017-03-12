@@ -44,6 +44,10 @@
                             "when": {
                                 "type": "string"
                             },
+                            "omitIndexFile": {
+                                "type": "boolean",
+                                "default": false
+                            },
                             "omitExtensionInFilePath": {
                                 "type": [
                                     "boolean",
@@ -72,7 +76,7 @@
                         {
                             "path": "**/*.styl",
                             "code": "@import '${filePath}'\n",
-                            "when": "fileExtn === 'styl'"
+                            "when": "fileType === 'stylus'"
                         }
                     ]
                 },
@@ -127,8 +131,7 @@
                         "objectRestSpread",
                         "exportExtensions",
                         "asyncGenerators",
-                        "functionBind",
-                        "jsx"
+                        "functionBind"
                     ]
                 }
             }
