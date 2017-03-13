@@ -1,3 +1,4 @@
+import * as vscode from 'vscode'
 import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
@@ -12,7 +13,9 @@ export default class NodePattern {
 	constructor(config: NodeConfiguration) {
 		this.config = config
 
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join('\n') : config.code)
+		const endOfLine = vscode.workspace.getConfiguration('files').get<string>('eol')
+
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine || '\n') : config.code)
 	}
 
 	match(givenPath: string): boolean {
