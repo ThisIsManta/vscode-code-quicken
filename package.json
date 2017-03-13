@@ -1,7 +1,7 @@
 {
     "name": "haste",
     "displayName": "Haste",
-    "description": "Creates and inserts your powerful snippets.",
+    "description": "Creates and inserts your file-based powerful snippets.",
     "version": "0.0.1",
     "publisher": "Anantachai Saothong",
     "engines": {
@@ -16,10 +16,11 @@
     "main": "./dist/extension",
     "contributes": {
         "configuration": {
-            "title": "Haste configurations",
+            "title": "Haste",
             "properties": {
                 "haste.files": {
                     "type": "array",
+                    "description": "An object containing file constraints.",
                     "items": {
                         "type": "object",
                         "required": [
@@ -33,19 +34,23 @@
                                 ],
                                 "items": {
                                     "type": "string"
-                                }
+                                },
+                                "description": "A glob pattern of files to be listed in the quick pick.\nSpecifying an exclamation mark (!) in front of the pattern will exclude those files from the list."
                             },
                             "code": {
                                 "type": [
                                     "string",
                                     "array"
-                                ]
+                                ],
+                                "description": "A snippet to be inserted to the current viewing document."
                             },
                             "when": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
                             },
                             "omitIndexFile": {
                                 "type": "boolean",
+                                "description": "A boolean to control whether a file named `index` must not present in the variable `filePath` of `code` setting.",
                                 "default": false
                             },
                             "omitExtensionInFilePath": {
@@ -53,6 +58,7 @@
                                     "boolean",
                                     "string"
                                 ],
+                                "description": "A boolean or glob pattern of file extensions to remove from `filePath` variable of `code` setting.\nSpecifying `true` will strip all extension from `filePath` variable of `code` setting.",
                                 "default": false
                             },
                             "insertAt": {
@@ -63,6 +69,7 @@
                                     "bottom",
                                     "cursor"
                                 ],
+                                "description": "A position of code to be inserted to the current viewing document.",
                                 "default": "cursor"
                             }
                         }
@@ -82,6 +89,7 @@
                 },
                 "haste.nodes": {
                     "type": "array",
+                    "description": "An object containing node module constraints.",
                     "items": {
                         "type": "object",
                         "required": [
@@ -89,13 +97,15 @@
                         ],
                         "properties": {
                             "name": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "A glob pattern of node module name."
                             },
                             "code": {
                                 "type": [
                                     "string",
                                     "array"
-                                ]
+                                ],
+                                "description": "A snippet to be inserted to the current viewing document."
                             },
                             "insertAt": {
                                 "enum": [
@@ -105,6 +115,7 @@
                                     "bottom",
                                     "cursor"
                                 ],
+                                "description": "A position of code to be inserted to the current viewing document.",
                                 "default": "cursor"
                             }
                         }
@@ -125,7 +136,7 @@
                     "items": {
                         "type": "string"
                     },
-                    "description": "",
+                    "description": "A list of plug-in names for Babylon JavaScript parser.\nSee also https://www.npmjs.com/package/babylon#plugins",
                     "default": [
                         "classProperties",
                         "objectRestSpread",
