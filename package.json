@@ -1,15 +1,36 @@
 {
     "name": "haste",
     "displayName": "Haste",
-    "description": "Creates and inserts your file-based powerful snippets.",
+    "description": "Create your file-based powerful snippets.",
     "version": "0.0.1",
-    "publisher": "Anantachai Saothong",
+    "author": "Anantachai Saothong",
+    "publisher": "thisismanta",
+    "categories": [
+        "Snippets"
+    ],
+    "keywords": [
+        "import",
+        "export",
+        "require",
+        "javascript",
+        "typescript",
+        "file",
+        "node",
+        "module"
+    ],
+    "repository": {
+        "url": "https://github.com/ThisIsManta/vscode-haste"
+    },
+    "bugs": {
+        "url": "https://github.com/ThisIsManta/vscode-haste/issues"
+    },
+    "icon": "logo.png",
+    "galleryBanner": {
+        "theme": "light"
+    },
     "engines": {
         "vscode": "^1.10.0"
     },
-    "categories": [
-        "Other"
-    ],
     "activationEvents": [
         "onCommand:haste"
     ],
@@ -157,19 +178,20 @@
         ]
     },
     "scripts": {
-        "vscode:prepublish": "tsc --project ./",
-        "compile": "tsc --project ./",
-        "postinstall": "node ./node_modules/vscode/bin/install"
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "vscode:prepublish": "tsc --project ./"
     },
     "devDependencies": {
         "@types/babylon": "^6.7.15",
-        "@types/node": "^6.0.40",
         "@types/lodash": "^4.14.54",
         "@types/minimatch": "^2.0.29",
-        "babylon": "^6.16.1",
-        "lodash": "^4.17.4",
-        "minimatch": "^3.0.3",
+        "@types/node": "^6.0.40",
         "typescript": "^2.0.3",
         "vscode": "^1.0.0"
+    },
+    "dependencies": {
+        "babylon": "^6.16.1",
+        "lodash": "^4.17.4",
+        "minimatch": "^3.0.3"
     }
 }
