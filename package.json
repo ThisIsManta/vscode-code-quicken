@@ -112,11 +112,11 @@
                     "default": [
                         {
                             "name": "[addon,assert,buffer,child_process,cluster,console,crypto,dgram,dns,domain,events,fs,http,http,https,net,os,path,punycode,querystring,readline,repl,stream,string_decoder,timers,tls,tty,url,util,v8,vm,zlib]",
-                            "code": "import * as ${nodeName} from '${nodeName}';\n"
+                            "code": "import * as ${moduleName} from '${moduleName}';\n"
                         },
                         {
                             "name": "*",
-                            "code": "import ${nodeName} from '${nodeName}';\n"
+                            "code": "import ${moduleName} from '${moduleName}';\n"
                         }
                     ]
                 },

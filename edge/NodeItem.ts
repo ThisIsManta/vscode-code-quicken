@@ -4,9 +4,10 @@ import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
 export default class NodeItem implements vscode.QuickPickItem {
-	label: string
-	description: string = ''
+	readonly label: string
+	readonly description: string = ''
 	readonly name: string
+	readonly version: string = ''
 
 	constructor(nodeName: string) {
 		this.label = nodeName
@@ -15,7 +16,8 @@ export default class NodeItem implements vscode.QuickPickItem {
 		try {
 			const packageJson = require(path.join(vscode.workspace.rootPath, 'node_modules', nodeName, 'package.json'))
 			if (packageJson.version) {
-				this.description = packageJson.version
+				this.description = 'v' + packageJson.version
+				this.version = packageJson.version
 			}
 		} catch (ex) { }
 	}

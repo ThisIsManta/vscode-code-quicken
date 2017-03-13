@@ -8,11 +8,8 @@ import FileInfo from './FileInfo'
 
 export default class FilePattern {
 	private config: FileConfiguration
-	private inclusion: Array<string>
-	private exclusion: Array<string>
-	readonly inclusionPath: string
-	readonly exclusionPath: string = null
-	readonly omitExtensions: string = null
+	readonly inclusionList: Array<string>
+	readonly exclusionList: Array<string>
 	readonly interpolate: (object) => string
 
 	get insertAt() {
@@ -27,24 +24,8 @@ export default class FilePattern {
 		this.config = config
 
 		const multiPaths = typeof config.path === 'string' ? [config.path as string] : (config.path as Array<string>)
-		this.inclusion = multiPaths.filter(item => item.startsWith('!') === false)
-		this.exclusion = _.difference(multiPaths, this.inclusion).map(item => _.trimStart(item, '!'))
-		if (this.inclusion.length === 1) {
-			this.inclusionPath = this.inclusion[0]
-		} else {
-			this.inclusionPath = '{' + this.inclusion.join(',') + '}'
-		}
-		if (this.exclusion.length === 1) {
-			this.exclusionPath = this.exclusion[0]
-		} else if (this.exclusion.length > 1) {
-			this.exclusionPath = '{' + this.exclusion.join(',') + '}'
-		}
-
-		if (config.omitExtensionInFilePath === true) {
-			this.omitExtensions = '*'
-		} else if (typeof config.omitExtensionInFilePath === 'string') {
-			this.omitExtensions = config.omitExtensionInFilePath
-		}
+		this.inclusionList = multiPaths.filter(item => item.startsWith('!') === false)
+		this.exclusionList = _.difference(multiPaths, this.inclusionList).map(item => _.trimStart(item, '!'))
 
 		this.interpolate = _.template(_.isArray(config.code) ? config.code.join('\n') : config.code)
 	}
@@ -70,7 +51,17 @@ export default class FilePattern {
 
 	match(givenPath: string): boolean {
 		const matcher = (glob) => minimatch([givenPath], glob).length > 0
-		return this.inclusion.some(matcher) && !this.exclusion.some(matcher)
+		return this.inclusionList.some(matcher) && !this.exclusionList.some(matcher)
 	}
 
+	getRelativeFilePath(fileInfo: FileInfo, currentDirectoryPath: string) {
+		let relativeFilePath = fileInfo.getRelativePath(currentDirectoryPath)
+		if (this.config.omitIndexFile && fileInfo.fileNameWithoutExtension === 'index') {
+			relativeFilePath = _.trimEnd(relativeFilePath.substring(0, relativeFilePath.length - fileInfo.fileNameWithExtension.length), '/')
+
+		} else if (this.config.omitExtensionInFilePath === true || typeof this.config.omitExtensionInFilePath === 'string' && minimatch([fileInfo.fileExtensionWithoutLeadingDot], this.config.omitExtensionInFilePath).length > 0) {
+			relativeFilePath = relativeFilePath.substring(0, relativeFilePath.length - 1 - fileInfo.fileExtensionWithoutLeadingDot.length)
+		}
+		return relativeFilePath
+	}
 }

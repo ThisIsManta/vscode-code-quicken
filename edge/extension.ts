@@ -16,14 +16,13 @@ const nodeCache = new Map<string, NodeItem>()
 
 export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get<Array<FilePattern>>('files', [])
-    const nodePatterns = config.get('nodes', []) as Array<NodePattern>
+    const filePatterns = config.get<Array<FileConfiguration>>('files', []).map(stub => new FilePattern(stub))
+    const nodePatterns = config.get<Array<NodeConfiguration>>('nodes', []).map(stub => new NodePattern(stub))
     const parserPlugins = config.get('javascript.parser.plugins') as Array<string>
 
     let disposable = vscode.commands.registerCommand('haste', async () => {
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
         if (vscode.workspace.rootPath === undefined || vscode.window.activeTextEditor === undefined || vscode.window.activeTextEditor.document.isUntitled) {
-            // TODO: show error message
             return null
         }
 
@@ -32,15 +31,30 @@ export function activate(context: vscode.ExtensionContext) {
 
         let items: Array<vscode.QuickPickItem> = []
 
-        // Add files
-        const applicableFilePatterns = filePatterns.filter(pattern => (console.log(pattern), pattern.check(currentDocument)))
+        // Add files which will be shown in VS Code picker
+        const applicableFilePatterns = filePatterns.filter(pattern => pattern.check(currentDocument))
         for (let index = 0; index < applicableFilePatterns.length; index++) {
             const pattern = applicableFilePatterns[index]
-            const files = await vscode.workspace.findFiles(pattern.inclusionPath, pattern.exclusionPath, 9000)
 
-            files.map(fileLink => {
+            const inclusionList = pattern.inclusionList
+            let inclusionPath
+            if (inclusionList.length === 1) {
+                inclusionPath = inclusionList[0]
+            } else {
+                inclusionPath = '{' + inclusionList.join(',') + '}'
+            }
+            const exclusionList = pattern.exclusionList
+            let exclusionPath = null
+            if (exclusionList.length === 1) {
+                exclusionPath = exclusionList[0]
+            } else if (exclusionList.length > 1) {
+                exclusionPath = '{' + exclusionList.join(',') + '}'
+            }
+
+            const fileList = await vscode.workspace.findFiles(inclusionPath, exclusionPath, 9000)
+            fileList.map(fileLink => {
                 if (fileCache.has(fileLink.fsPath) === false) {
-                    fileCache.set(fileLink.fsPath, new FileItem(fileLink, pattern))
+                    fileCache.set(fileLink.fsPath, new FileItem(fileLink))
                 }
                 return fileCache.get(fileLink.fsPath)
             }).forEach(item => {
@@ -52,7 +66,7 @@ export function activate(context: vscode.ExtensionContext) {
             })
         }
 
-        // Remove duplicates and sort files
+        // Remove duplicate files and sort files
         if (items.length > 0) {
             items = _.uniq(items)
             items = _.sortBy(items, [
@@ -61,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
             ])
         }
 
-        // Add node modules
+        // Add node modules which will be shown in VS Code picker
         if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
             const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
 
@@ -90,55 +104,59 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        // Stop processing if there is no selection
+        // Show VS Code picker and await user for the selection
         const select = await vscode.window.showQuickPick(items, { placeHolder: 'Type a file path or node module name' })
+
+        // Stop processing if there is no selection
         if (!select) {
             return null
         }
 
+        // Read all `import` statements of the current viewing document (JavaScript only)
         const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, parserPlugins)
-        let existingImportItems = []
+        let existingImportStatements = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
-            existingImportItems = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
+            existingImportStatements = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
         }
 
-        let code = ''
+        // Create a snippet
+        let snippet = ''
         let insertAt: string
         if (select instanceof NodeItem) {
             const pattern = nodePatterns.find(pattern => pattern.match(select.name))
 
             insertAt = pattern.insertAt
 
-            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === select.name)) {
+            // Stop processing if the select file does exist in the current viewing document
+            if (existingImportStatements.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === select.name)) {
                 vscode.window.showInformationMessage(`The module '${select.name}' has been already imported.`)
                 return null
             }
 
-            code = pattern.interpolate({
+            snippet = pattern.interpolate({
                 _, // Lodash
                 minimatch,
-                nodeName: select.name,
+                moduleName: select.name,
+                moduleVersion: select.version,
                 ...Shared,
             })
 
         } else if (select instanceof FileItem) {
-            const pattern = filePatterns.find(pattern =>
-                pattern.match(_.trimStart(select.fileInfo.localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')) &&
-                pattern.check(currentDocument)
-            ) as FilePattern
+            const selectPathInUnixStyleThatIsRelativeToRootPath = _.trimStart(select.fileInfo.localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
+            const pattern = filePatterns.find(pattern => pattern.match(selectPathInUnixStyleThatIsRelativeToRootPath) && pattern.check(currentDocument))
 
             insertAt = pattern.insertAt
 
             const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
             const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, parserPlugins)
-            const selectRelativeFilePath = select.getRelativeFilePath(currentFileInfo.directoryPath, pattern)
+            const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
-            if (existingImportItems.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
+            if (existingImportStatements.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
                 vscode.window.showErrorMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                 return null
             }
 
-            code = pattern.interpolate({
+            snippet = pattern.interpolate({
                 _, // Lodash
                 minimatch,
                 fullPath: select.fileInfo.unixPath,
@@ -153,25 +171,26 @@ export function activate(context: vscode.ExtensionContext) {
             })
         }
 
+        // Write a snippet to the current viewing document
         editor.edit(worker => {
             let position: vscode.Position
-            if (insertAt === 'beforeFirstImport' && existingImportItems.length > 0) {
-                position = new vscode.Position(_.first(existingImportItems).loc.start.line - 1, _.first(existingImportItems).loc.start.column)
+            if (insertAt === 'beforeFirstImport' && existingImportStatements.length > 0) {
+                position = new vscode.Position(_.first(existingImportStatements).loc.start.line - 1, _.first(existingImportStatements).loc.start.column)
 
-            } else if (insertAt === 'beforeFirstImport' && existingImportItems.length === 0 || insertAt === 'top') {
+            } else if (insertAt === 'beforeFirstImport' && existingImportStatements.length === 0 || insertAt === 'top') {
                 position = new vscode.Position(0, 0)
 
-            } else if (insertAt === 'afterLastImport' && existingImportItems.length > 0) {
-                position = new vscode.Position(_.last(existingImportItems).loc.end.line, 0)
+            } else if (insertAt === 'afterLastImport' && existingImportStatements.length > 0) {
+                position = new vscode.Position(_.last(existingImportStatements).loc.end.line, 0)
 
-            } else if (insertAt === 'afterLastImport' && existingImportItems.length === 0 || insertAt === 'bottom') {
+            } else if (insertAt === 'afterLastImport' && existingImportStatements.length === 0 || insertAt === 'bottom') {
                 position = new vscode.Position(currentDocument.lineCount, 0)
 
             } else {
                 position = editor.selection.active
             }
 
-            worker.insert(position, code);
+            worker.insert(position, snippet);
         })
     })
 
