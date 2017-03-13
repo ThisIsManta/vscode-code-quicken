@@ -3,6 +3,8 @@ import * as babylon from 'babylon'
 
 export const PATH_SEPARATOR_FOR_WINDOWS = /\\/g
 
+export const DRIVE_LETTER_FOR_WINDOWS = /^(\w+):\\/
+
 export const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
 
 export const UPPER_DIRECTORY_SEMANTIC = /\.\.\//g

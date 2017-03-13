@@ -136,6 +136,9 @@ export function activate(context: vscode.ExtensionContext) {
             snippet = pattern.interpolate({
                 _, // Lodash
                 minimatch,
+                path,
+                activeDocument: currentDocument,
+                activeFileInfo: currentFileInfo,
                 moduleName: select.name,
                 moduleVersion: select.version,
                 ...Shared,
@@ -159,15 +162,15 @@ export function activate(context: vscode.ExtensionContext) {
             snippet = pattern.interpolate({
                 _, // Lodash
                 minimatch,
-                fullPath: select.fileInfo.unixPath,
-                filePath: selectRelativeFilePath,
-                fileName: select.fileInfo.fileNameWithoutExtension,
-                fileExtn: select.fileInfo.fileNameWithExtension,
-                codeText: selectCodeText,
-                codeTree: selectCodeTree,
-                hasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS),
+                path,
+                activeDocument: currentDocument,
+                activeFileInfo: currentFileInfo,
+                selectFileInfo: select.fileInfo,
+                selectFilePath: selectRelativeFilePath,
+                selectCodeText: selectCodeText,
+                selectCodeTree: selectCodeTree,
+                selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined,
                 ...Shared,
-                findInCodeTree: (target) => Shared.findInCodeTree(selectCodeTree, target),
             })
         }
 

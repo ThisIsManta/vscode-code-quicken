@@ -14,7 +14,7 @@ export default class FileInfo {
 
 	constructor(localPath: string) {
 		this.localPath = localPath
-		this.unixPath = this.localPath.replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
+		this.unixPath = this.localPath.replace(Shared.DRIVE_LETTER_FOR_WINDOWS, '/$1/').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
 		this.fileExtensionWithoutLeadingDot = path.extname(this.localPath).replace(/^\./, '')
 		this.fileNameWithExtension = path.basename(this.localPath)
 		this.fileNameWithoutExtension = this.fileNameWithExtension.replace(new RegExp('\\.' + this.fileExtensionWithoutLeadingDot + '$', 'i'), '')

@@ -16,10 +16,6 @@ export default class FilePattern {
 		return this.config.insertAt
 	}
 
-	get omitIndexFile() {
-		return this.config.omitIndexFile
-	}
-
 	constructor(config: FileConfiguration) {
 		this.config = config
 
@@ -32,14 +28,13 @@ export default class FilePattern {
 
 	check(document: vscode.TextDocument): boolean {
 		if (this.config.when) {
-			const fileInfo = new FileInfo(document.fileName)
 			try {
 				return Boolean(_.template('${' + this.config.when + '}')({
-					rootPath: (vscode.workspace.rootPath || '').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'),
-					filePath: fileInfo.unixPath,
-					fileName: fileInfo.fileNameWithoutExtension,
-					fileExtn: fileInfo.fileExtensionWithoutLeadingDot,
-					fileType: document.languageId,
+					_, // Lodash
+					minimatch,
+					path,
+					activeDocument: document,
+					activeFile: new FileInfo(document.fileName),
 				}))
 			} catch (ex) {
 				console.error(ex)
@@ -56,10 +51,10 @@ export default class FilePattern {
 
 	getRelativeFilePath(fileInfo: FileInfo, currentDirectoryPath: string) {
 		let relativeFilePath = fileInfo.getRelativePath(currentDirectoryPath)
-		if (this.config.omitIndexFile && fileInfo.fileNameWithoutExtension === 'index') {
+		if (this.config.omitIndexInSelectFilePath && fileInfo.fileNameWithoutExtension === 'index') {
 			relativeFilePath = _.trimEnd(relativeFilePath.substring(0, relativeFilePath.length - fileInfo.fileNameWithExtension.length), '/')
 
-		} else if (this.config.omitExtensionInFilePath === true || typeof this.config.omitExtensionInFilePath === 'string' && minimatch([fileInfo.fileExtensionWithoutLeadingDot], this.config.omitExtensionInFilePath).length > 0) {
+		} else if (this.config.omitExtensionInSelectFilePath === true || typeof this.config.omitExtensionInSelectFilePath === 'string' && minimatch([fileInfo.fileExtensionWithoutLeadingDot], this.config.omitExtensionInSelectFilePath).length > 0) {
 			relativeFilePath = relativeFilePath.substring(0, relativeFilePath.length - 1 - fileInfo.fileExtensionWithoutLeadingDot.length)
 		}
 		return relativeFilePath

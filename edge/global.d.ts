@@ -3,8 +3,8 @@ interface FileConfiguration {
 	code: string | string[]
 	when?: string
 	interpolate: (object) => string
-	omitIndexFile: boolean
-	omitExtensionInFilePath: boolean | string
+	omitIndexInSelectFilePath: boolean
+	omitExtensionInSelectFilePath: boolean | string
 	insertAt: string
 }
 

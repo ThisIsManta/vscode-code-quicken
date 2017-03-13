@@ -37,28 +37,28 @@
                                 },
                                 "description": "A glob pattern of files to be listed in the quick pick.\nSpecifying an exclamation mark (!) in front of the pattern will exclude those files from the list."
                             },
+                            "when": {
+                                "type": "string",
+                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
+                            },
                             "code": {
                                 "type": [
                                     "string",
                                     "array"
                                 ],
-                                "description": "A snippet to be inserted to the current viewing document."
+                                "description": "An ES6 template string to be inserted to the current viewing document."
                             },
-                            "when": {
-                                "type": "string",
-                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
-                            },
-                            "omitIndexFile": {
+                            "omitIndexInSelectFilePath": {
                                 "type": "boolean",
-                                "description": "A boolean to control whether a file named `index` must not present in the variable `filePath` of `code` setting.",
+                                "description": "A boolean to control whether a file named `index` must not present in the variable `selectFilePath` of `code` setting.",
                                 "default": false
                             },
-                            "omitExtensionInFilePath": {
+                            "omitExtensionInSelectFilePath": {
                                 "type": [
                                     "boolean",
                                     "string"
                                 ],
-                                "description": "A boolean or glob pattern of file extensions to remove from `filePath` variable of `code` setting.\nSpecifying `true` will strip all extension from `filePath` variable of `code` setting.",
+                                "description": "A boolean or glob pattern of file extensions to remove from `selectFilePath` variable of `code` setting.\nSpecifying `true` will strip all extension from `selectFilePath` variable of `code` setting.",
                                 "default": false
                             },
                             "insertAt": {
@@ -77,13 +77,13 @@
                     "default": [
                         {
                             "path": "**/*.js",
-                            "code": "import ${hasDefaultExport ? '' : '* as '}${getProperVariableName(fileName)} from '${filePath}';\n",
+                            "code": "import ${selectFileHasDefaultExport ? '' : '* as '}${getProperVariableName(selectFileInfo.fileNameWithoutExtension)} from '${selectFilePath}';\n",
                             "insertAt": "beforeFirstImport"
                         },
                         {
                             "path": "**/*.styl",
-                            "code": "@import '${filePath}'\n",
-                            "when": "fileType === 'stylus'"
+                            "when": "activeDocument.languageId === 'stylus'",
+                            "code": "@import '${selectFilePath}'\n"
                         }
                     ]
                 },
@@ -122,12 +122,8 @@
                     },
                     "default": [
                         {
-                            "name": "[addon,assert,buffer,child_process,cluster,console,crypto,dgram,dns,domain,events,fs,http,http,https,net,os,path,punycode,querystring,readline,repl,stream,string_decoder,timers,tls,tty,url,util,v8,vm,zlib]",
-                            "code": "import * as ${moduleName} from '${moduleName}';\n"
-                        },
-                        {
                             "name": "*",
-                            "code": "import ${moduleName} from '${moduleName}';\n"
+                            "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n"
                         }
                     ]
                 },
@@ -150,7 +146,7 @@
         "commands": [
             {
                 "command": "haste",
-                "title": "Adds a file snippet quickly"
+                "title": "Inserts a powerful file-based snippet"
             }
         ],
         "keybindings": [
