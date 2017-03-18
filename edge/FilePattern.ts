@@ -23,7 +23,8 @@ export default class FilePattern {
 		this.inclusionList = multiPaths.filter(item => item.startsWith('!') === false)
 		this.exclusionList = _.difference(multiPaths, this.inclusionList).map(item => _.trimStart(item, '!'))
 
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join('\n') : config.code)
+		const endOfLine = vscode.workspace.getConfiguration('files').get<string>('eol')
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine) : config.code)
 	}
 
 	check(document: vscode.TextDocument): boolean {

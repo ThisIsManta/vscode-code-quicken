@@ -14,8 +14,7 @@ export default class NodePattern {
 		this.config = config
 
 		const endOfLine = vscode.workspace.getConfiguration('files').get<string>('eol')
-
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine || '\n') : config.code)
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine) : config.code)
 	}
 
 	match(givenPath: string): boolean {
