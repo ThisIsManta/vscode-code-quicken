@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("lodash");
 const babylon = require("babylon");
 exports.PATH_SEPARATOR_FOR_WINDOWS = /\\/g;
+exports.DRIVE_LETTER_FOR_WINDOWS = /^(\w+):\\/;
 exports.CURRENT_DIRECTORY_SEMANTIC = /^\.\//;
 exports.UPPER_DIRECTORY_SEMANTIC = /\.\.\//g;
 exports.INDEX_FILE = /^index\.\w+$/i;

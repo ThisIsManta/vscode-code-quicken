@@ -26,7 +26,6 @@ function activate(context) {
     const filePatterns = config.get('files', []).map(stub => new FilePattern_1.default(stub));
     const nodePatterns = config.get('nodes', []).map(stub => new NodePattern_1.default(stub));
     const parserPlugins = config.get('javascript.parser.plugins');
-    const exclusionFiles = _.chain(vscode.workspace.getConfiguration('files').get('exclude')).toPairs().filter('1').map('0').value();
     let disposable = vscode.commands.registerCommand('haste', () => __awaiter(this, void 0, void 0, function* () {
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
         if (vscode.workspace.rootPath === undefined || vscode.window.activeTextEditor === undefined || vscode.window.activeTextEditor.document.isUntitled) {
@@ -39,7 +38,7 @@ function activate(context) {
         const applicableFilePatterns = filePatterns.filter(pattern => pattern.check(currentDocument));
         for (let index = 0; index < applicableFilePatterns.length; index++) {
             const pattern = applicableFilePatterns[index];
-            const inclusionList = pattern.inclusion;
+            const inclusionList = pattern.inclusionList;
             let inclusionPath;
             if (inclusionList.length === 1) {
                 inclusionPath = inclusionList[0];
@@ -47,7 +46,7 @@ function activate(context) {
             else {
                 inclusionPath = '{' + inclusionList.join(',') + '}';
             }
-            const exclusionList = [...pattern.exclusion, ...exclusionFiles];
+            const exclusionList = pattern.exclusionList;
             let exclusionPath = null;
             if (exclusionList.length === 1) {
                 exclusionPath = exclusionList[0];
@@ -55,7 +54,6 @@ function activate(context) {
             else if (exclusionList.length > 1) {
                 exclusionPath = '{' + exclusionList.join(',') + '}';
             }
-            const stamp = Date.now();
             const fileList = yield vscode.workspace.findFiles(inclusionPath, exclusionPath, 9000);
             fileList.map(fileLink => {
                 if (fileCache.has(fileLink.fsPath) === false) {
@@ -68,7 +66,6 @@ function activate(context) {
                     items.push(item);
                 }
             });
-            console.log(Date.now() - stamp);
         }
         // Remove duplicate files and sort files
         if (items.length > 0) {
@@ -129,7 +126,8 @@ function activate(context) {
             }
             snippet = pattern.interpolate(Object.assign({ _,
                 minimatch: // Lodash
-                minimatch_1.match, moduleName: select.name, moduleVersion: select.version }, Shared));
+                minimatch_1.match,
+                path, activeDocument: currentDocument, activeFileInfo: currentFileInfo, moduleName: select.name, moduleVersion: select.version }, Shared));
         }
         else if (select instanceof FileItem_1.default) {
             const selectPathInUnixStyleThatIsRelativeToRootPath = _.trimStart(select.fileInfo.localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/');
@@ -144,7 +142,8 @@ function activate(context) {
             }
             snippet = pattern.interpolate(Object.assign({ _,
                 minimatch: // Lodash
-                minimatch_1.match, fullPath: select.fileInfo.unixPath, filePath: selectRelativeFilePath, fileName: select.fileInfo.fileNameWithoutExtension, fileExtn: select.fileInfo.fileNameWithExtension, codeText: selectCodeText, codeTree: selectCodeTree, hasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) }, Shared, { findInCodeTree: (target) => Shared.findInCodeTree(selectCodeTree, target) }));
+                minimatch_1.match,
+                path, activeDocument: currentDocument, activeFileInfo: currentFileInfo, selectFileInfo: select.fileInfo, selectFilePath: selectRelativeFilePath, selectCodeText: selectCodeText, selectCodeTree: selectCodeTree, selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined }, Shared));
         }
         // Write a snippet to the current viewing document
         editor.edit(worker => {
