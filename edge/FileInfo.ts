@@ -19,7 +19,7 @@ export default class FileInfo {
 		this.fileNameWithExtension = path.basename(this.localPath)
 		this.fileNameWithoutExtension = this.fileNameWithExtension.replace(new RegExp('\\.' + this.fileExtensionWithoutLeadingDot + '$', 'i'), '')
 		this.directoryPath = path.dirname(this.localPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
-		this.directoryName = _.last(path.dirname(this.localPath).split('/'))
+		this.directoryName = _.last(path.dirname(this.localPath).split(path.sep))
 	}
 
 	getRelativePath(rootPath: string) {
