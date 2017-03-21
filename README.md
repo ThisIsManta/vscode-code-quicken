@@ -165,7 +165,7 @@ You may use one or more following pre-defined variables:
   - `selectFilePath` as a normalized _relative file path_ of the chosen file. This has `./` at the beginning if and only if the chosen file and the current viewing document are in the same folder. This can be used safely in JavaScript `import` statement.
   - `selectCodeText` as a whole text of the chosen file.
   - `selectCodeTree` as a parsed **[Babylon](https://www.npmjs.com/package/babylon)** object of the chosen file.
-  - `selectFileHasDefaultExport` as boolean that `true` when the chosen file has `export default` or `module.exports`, otherwise `false`.
+  - `selectFileHasDefaultExport` as boolean that is `true` when the chosen file has `export default` or `module.exports`, otherwise `false`.
   - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
@@ -252,6 +252,7 @@ For example, if you are working with **React**, you need to add `"jsx"` as one o
 ## Known issues and future work
 
 - Add support for JavaScript `require(...)` statement.
+- Add support for [vscode.FileSystemWatcher](https://code.visualstudio.com/docs/extensionAPI/vscode-api#FileSystemWatcher).
 - Add an ability to use new settings without having VS Code restarted.
 
 ## Release Notes
