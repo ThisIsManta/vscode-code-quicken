@@ -24,8 +24,9 @@
     "bugs": {
         "url": "https://github.com/ThisIsManta/vscode-haste/issues"
     },
-    "icon": "logo.png",
+    "icon": "icon.png",
     "galleryBanner": {
+        "color": "#283593",
         "theme": "light"
     },
     "engines": {
@@ -179,6 +180,7 @@
     },
     "scripts": {
         "postinstall": "node ./node_modules/vscode/bin/install",
+        "compile": "tsc -watch --project ./",
         "vscode:prepublish": "tsc --project ./"
     },
     "devDependencies": {
