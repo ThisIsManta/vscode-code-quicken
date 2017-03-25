@@ -1,7 +1,7 @@
+.gitignore
 .vscode/**
 .vscode-test/**
-test/**
-src/**
+edge
+test
 **/*.map
-.gitignore
 tsconfig.json

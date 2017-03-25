@@ -15,12 +15,20 @@ const fileCache = new Map<string, FileItem>()
 const nodeCache = new Map<string, NodeItem>()
 
 export function activate(context: vscode.ExtensionContext) {
-    const config = vscode.workspace.getConfiguration('haste')
-    const filePatterns = config.get<Array<FileConfiguration>>('files', []).map(stub => new FilePattern(stub))
-    const nodePatterns = config.get<Array<NodeConfiguration>>('nodes', []).map(stub => new NodePattern(stub))
-    const parserPlugins = config.get('javascript.parser.plugins') as Array<string>
+    let filePatterns: Array<FilePattern>
+    let nodePatterns: Array<NodePattern>
+    let jsParserPlugins: Array<string>
 
-    let disposable = vscode.commands.registerCommand('haste', async () => {
+    function loadLocalConfiguration() {
+        const config = vscode.workspace.getConfiguration('haste')
+        filePatterns = config.get<Array<FileConfiguration>>('files', []).map(stub => new FilePattern(stub))
+        nodePatterns = config.get<Array<NodeConfiguration>>('nodes', []).map(stub => new NodePattern(stub))
+        jsParserPlugins = config.get<Array<string>>('javascript.parser.plugins')
+    }
+
+    loadLocalConfiguration()
+
+    context.subscriptions.push(vscode.commands.registerCommand('haste', async () => {
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
         if (vscode.workspace.rootPath === undefined || vscode.window.activeTextEditor === undefined || vscode.window.activeTextEditor.document.isUntitled) {
             return null
@@ -113,7 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         // Read all `import` statements of the current viewing document (JavaScript only)
-        const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, parserPlugins)
+        const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, jsParserPlugins)
         let existingImportStatements = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
             existingImportStatements = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
@@ -151,7 +159,7 @@ export function activate(context: vscode.ExtensionContext) {
             insertAt = pattern.insertAt
 
             const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
-            const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, parserPlugins)
+            const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
             const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
             if (existingImportStatements.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
@@ -195,13 +203,14 @@ export function activate(context: vscode.ExtensionContext) {
 
             worker.insert(position, snippet);
         })
-    })
+    }))
 
     vscode.workspace.onDidChangeConfiguration(() => {
-        vscode.window.showInformationMessage('VS Code must be restarted in order to make changes to Haste extension.')
-    })
+        loadLocalConfiguration()
 
-    context.subscriptions.push(disposable)
+        fileCache.clear()
+        nodeCache.clear()
+    })
 }
 
 export function deactivate() {
