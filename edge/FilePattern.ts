@@ -6,11 +6,13 @@ import { match as minimatch } from 'minimatch'
 import * as Shared from './Shared'
 import FileInfo from './FileInfo'
 
-export default class FilePattern {
+export default class FilePattern implements vscode.Disposable {
 	private config: FileConfiguration
-	readonly inclusionList: Array<string>
-	readonly exclusionList: Array<string>
+	private readonly inclusionList: Array<string>
+	private readonly exclusionList: Array<string>
 	readonly interpolate: (object) => string
+	private fileCache: Array<vscode.Uri> = null
+	private fileWatch: vscode.FileSystemWatcher = null
 
 	get insertAt() {
 		return this.config.insertAt
@@ -22,6 +24,7 @@ export default class FilePattern {
 		const multiPaths = typeof config.path === 'string' ? [config.path as string] : (config.path as Array<string>)
 		this.inclusionList = multiPaths.filter(item => item.startsWith('!') === false)
 		this.exclusionList = _.difference(multiPaths, this.inclusionList).map(item => _.trimStart(item, '!'))
+
 
 		const endOfLine = vscode.workspace.getConfiguration('files').get<string>('eol')
 		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine) : config.code)
@@ -45,8 +48,13 @@ export default class FilePattern {
 		return true
 	}
 
-	match(givenPath: string): boolean {
-		const matcher = (glob) => minimatch([givenPath], glob).length > 0
+	match(localPath: string): boolean {
+		let pathInUnixStyleThatIsRelativeToRootPath = localPath
+		if (localPath.startsWith(vscode.workspace.rootPath)) {
+			pathInUnixStyleThatIsRelativeToRootPath = _.trimStart(localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
+		}
+
+		const matcher = (glob) => minimatch([pathInUnixStyleThatIsRelativeToRootPath], glob).length > 0
 		return this.inclusionList.some(matcher) && !this.exclusionList.some(matcher)
 	}
 
@@ -59,5 +67,48 @@ export default class FilePattern {
 			relativeFilePath = relativeFilePath.substring(0, relativeFilePath.length - 1 - fileInfo.fileExtensionWithoutLeadingDot.length)
 		}
 		return relativeFilePath
+	}
+
+	async getFileLinks() {
+		if (this.fileCache === null) {
+			let inclusionPath: string
+			if (this.inclusionList.length === 1) {
+				inclusionPath = this.inclusionList[0]
+			} else {
+				inclusionPath = '{' + this.inclusionList.join(',') + '}'
+			}
+
+			let exclusionPath: string
+			if (this.exclusionList.length === 1) {
+				exclusionPath = this.exclusionList[0]
+			} else if (this.exclusionList.length > 1) {
+				exclusionPath = '{' + this.exclusionList.join(',') + '}'
+			}
+
+			this.fileCache = await vscode.workspace.findFiles(inclusionPath, exclusionPath)
+
+			try {
+				this.fileWatch = vscode.workspace.createFileSystemWatcher(path.join(vscode.workspace.rootPath, inclusionPath))
+				this.fileWatch.onDidCreate(fileLink => {
+					if (this.match(fileLink.fsPath)) {
+						this.fileCache.push(fileLink)
+					}
+				})
+				this.fileWatch.onDidDelete(fileLink => {
+					_.remove(this.fileCache, existingFileLink => existingFileLink.fsPath === fileLink.fsPath)
+				})
+
+			} catch (ex) {
+				const temp = this.fileCache
+				this.fileCache = null
+				return temp
+			}
+		}
+		return this.fileCache
+	}
+
+	dispose() {
+		this.fileCache = null
+		this.fileWatch.dispose()
 	}
 }

@@ -42,25 +42,8 @@ export function activate(context: vscode.ExtensionContext) {
         // Add files which will be shown in VS Code picker
         const applicableFilePatterns = filePatterns.filter(pattern => pattern.check(currentDocument))
         for (let index = 0; index < applicableFilePatterns.length; index++) {
-            const pattern = applicableFilePatterns[index]
-
-            const inclusionList = pattern.inclusionList
-            let inclusionPath
-            if (inclusionList.length === 1) {
-                inclusionPath = inclusionList[0]
-            } else {
-                inclusionPath = '{' + inclusionList.join(',') + '}'
-            }
-            const exclusionList = pattern.exclusionList
-            let exclusionPath = null
-            if (exclusionList.length === 1) {
-                exclusionPath = exclusionList[0]
-            } else if (exclusionList.length > 1) {
-                exclusionPath = '{' + exclusionList.join(',') + '}'
-            }
-
-            const fileList = await vscode.workspace.findFiles(inclusionPath, exclusionPath, 9000)
-            fileList.map(fileLink => {
+            const fileLinks = await applicableFilePatterns[index].getFileLinks()
+            fileLinks.map(fileLink => {
                 if (fileCache.has(fileLink.fsPath) === false) {
                     fileCache.set(fileLink.fsPath, new FileItem(fileLink))
                 }
@@ -120,11 +103,28 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        // Read all `import` statements of the current viewing document (JavaScript only)
+        // Read all import/require statements of the current viewing document (JavaScript only)
         const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, jsParserPlugins)
-        let existingImportStatements = []
+        let existingImports = []
+        let existingRequire = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
-            existingImportStatements = currentCodeTree.program.body.filter((line: any) => line.type === 'ImportDeclaration' && line.source)
+            existingImports = currentCodeTree.program.body
+                .filter((line: any) => line.type === 'ImportDeclaration' && line.source && line.source.type === 'StringLiteral')
+                .map((line: any) => ({ ...line.loc, value: line.source.value }))
+            existingRequire = _.flatten(currentCodeTree.program.body
+                .filter((line: any) => line.type === 'VariableDeclaration')
+                .map((line: any) => line.declarations
+                    .filter(stub =>
+                        stub.type === 'VariableDeclarator'
+                        && stub.init && stub.init.type === 'CallExpression'
+                        && stub.init.callee && stub.init.callee.type === 'Identifier'
+                        && stub.init.callee.name === 'require'
+                        && stub.init.arguments.length === 1
+                        && stub.init.arguments[0].type === 'StringLiteral'
+                    )
+                    .map(stub => ({ ...line.loc, value: stub.init.arguments[0].value }))
+                )
+            )
         }
 
         // Create a snippet
@@ -136,7 +136,7 @@ export function activate(context: vscode.ExtensionContext) {
             insertAt = pattern.insertAt
 
             // Stop processing if the select file does exist in the current viewing document
-            if (existingImportStatements.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === select.name)) {
+            if (existingImports.find(stub => stub.value === select.name) || existingRequire.find(stub => stub.value === select.name)) {
                 vscode.window.showInformationMessage(`The module '${select.name}' has been already imported.`)
                 return null
             }
@@ -153,8 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
             })
 
         } else if (select instanceof FileItem) {
-            const selectPathInUnixStyleThatIsRelativeToRootPath = _.trimStart(select.fileInfo.localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
-            const pattern = filePatterns.find(pattern => pattern.match(selectPathInUnixStyleThatIsRelativeToRootPath) && pattern.check(currentDocument))
+            const pattern = filePatterns.find(pattern => pattern.match(select.fileInfo.localPath) && pattern.check(currentDocument))
 
             insertAt = pattern.insertAt
 
@@ -162,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
             const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
             const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
-            if (existingImportStatements.find((line: any) => line.source.type === 'StringLiteral' && line.source.value === selectRelativeFilePath)) {
+            if (existingImports.find(stub => stub.value === selectRelativeFilePath) || existingRequire.find(stub => stub.value === selectRelativeFilePath)) {
                 vscode.window.showErrorMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                 return null
             }
@@ -185,16 +184,22 @@ export function activate(context: vscode.ExtensionContext) {
         // Write a snippet to the current viewing document
         editor.edit(worker => {
             let position: vscode.Position
-            if (insertAt === 'beforeFirstImport' && existingImportStatements.length > 0) {
-                position = new vscode.Position(_.first(existingImportStatements).loc.start.line - 1, _.first(existingImportStatements).loc.start.column)
+            if (insertAt === 'beforeFirstImport' && existingImports.length > 0) {
+                position = new vscode.Position(_.first(existingImports).start.line - 1, _.first(existingImports).start.column)
 
-            } else if (insertAt === 'beforeFirstImport' && existingImportStatements.length === 0 || insertAt === 'top') {
+            } else if (insertAt === 'beforeFirstImport' && existingRequire.length > 0) {
+                position = new vscode.Position(_.first(existingRequire).start.line - 1, _.first(existingRequire).start.column)
+
+            } else if (insertAt === 'beforeFirstImport' || insertAt === 'top') {
                 position = new vscode.Position(0, 0)
 
-            } else if (insertAt === 'afterLastImport' && existingImportStatements.length > 0) {
-                position = new vscode.Position(_.last(existingImportStatements).loc.end.line, 0)
+            } else if (insertAt === 'afterLastImport' && existingImports.length > 0) {
+                position = new vscode.Position(_.last(existingImports).end.line, 0)
 
-            } else if (insertAt === 'afterLastImport' && existingImportStatements.length === 0 || insertAt === 'bottom') {
+            } else if (insertAt === 'afterLastImport' && existingRequire.length > 0) {
+                position = new vscode.Position(_.last(existingRequire).end.line, 0)
+
+            } else if (insertAt === 'afterLastImport' || insertAt === 'bottom') {
                 position = new vscode.Position(currentDocument.lineCount, 0)
 
             } else {

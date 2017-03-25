@@ -249,12 +249,6 @@ This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a Ja
 
 For example, if you are working with **React**, you need to add `"jsx"` as one of the plug-ins, so this extension is able to work smoothly.
 
-## Known issues and future work
-
-- Add support for JavaScript `require(...)` statement.
-- Add support for [vscode.FileSystemWatcher](https://code.visualstudio.com/docs/extensionAPI/vscode-api#FileSystemWatcher).
-- Add an ability to use new settings without having VS Code restarted.
-
 ## Release Notes
 
 ### 0.0.1

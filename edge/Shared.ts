@@ -25,6 +25,11 @@ export const MODULE_EXPORTS = {
 	}
 }
 
+export const MODULE_REQUIRE = {
+	type:'VariableDeclaration',
+	
+}
+
 export function getProperVariableName(fileName: string) {
 	const words = _.words(fileName)
 
