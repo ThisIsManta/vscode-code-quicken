@@ -14,3 +14,9 @@ interface NodeConfiguration {
 	when?: string
 	insertAt: string
 }
+
+interface TextConfiguration {
+	name: string
+	code: string | string[]
+	when?: string
+}

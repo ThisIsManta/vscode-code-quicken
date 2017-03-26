@@ -42,11 +42,12 @@
             "properties": {
                 "haste.files": {
                     "type": "array",
-                    "description": "An object containing file constraints.",
+                    "description": "An object containing file snippets.",
                     "items": {
                         "type": "object",
                         "required": [
-                            "path"
+                            "path",
+                            "code"
                         ],
                         "properties": {
                             "path": {
@@ -111,11 +112,12 @@
                 },
                 "haste.nodes": {
                     "type": "array",
-                    "description": "An object containing node module constraints.",
+                    "description": "An object containing node module snippets.",
                     "items": {
                         "type": "object",
                         "required": [
-                            "name"
+                            "name",
+                            "code"
                         ],
                         "properties": {
                             "name": {
@@ -148,6 +150,34 @@
                             "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n"
                         }
                     ]
+                },
+                "haste.texts": {
+                    "type": "array",
+                    "description": "An object containing context-aware snippets.",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "code"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "A name of this snippet."
+                            },
+                            "when": {
+                                "type": "string",
+                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
+                            },
+                            "code": {
+                                "type": [
+                                    "string",
+                                    "array"
+                                ],
+                                "description": "A snippet to be inserted to the current viewing document."
+                            }
+                        }
+                    }
                 },
                 "haste.javascript.parser.plugins": {
                     "type": "array",

@@ -1,6 +1,6 @@
 # Haste
 
-**Haste** is a powerful **VS Code** extension for creating file-based snippets, such as `import` and `require` statements in JavaScript.
+**Haste** is a powerful **VS Code** extension for creating file-based context-aware snippets, such as `import` and `require` statements in JavaScript.
 
 This extension is heavily inspired by [**Quick Require**](https://marketplace.visualstudio.com/items?itemName=milkmidi.vs-code-quick-require), but it is written from scratch because the latter one supported only `import` and `require` in JavaScript and could not be customized at all. For example, in some JavaScript convention, you might want to omit the JavaScript file extension (`.js`) and the semi-colon (`;`) at the end of the line, hence it becomes `import MyFile from './MyFile'`.
 

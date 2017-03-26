@@ -8,8 +8,10 @@ import * as Shared from './Shared'
 import FileInfo from './FileInfo'
 import FilePattern from './FilePattern'
 import NodePattern from './NodePattern'
+import TextPattern from './TextPattern'
 import FileItem from './FileItem'
 import NodeItem from './NodeItem'
+import TextItem from './TextItem'
 
 const fileCache = new Map<string, FileItem>()
 const nodeCache = new Map<string, NodeItem>()
@@ -17,12 +19,14 @@ const nodeCache = new Map<string, NodeItem>()
 export function activate(context: vscode.ExtensionContext) {
     let filePatterns: Array<FilePattern>
     let nodePatterns: Array<NodePattern>
+    let textPatterns: Array<TextPattern>
     let jsParserPlugins: Array<string>
 
     function loadLocalConfiguration() {
         const config = vscode.workspace.getConfiguration('haste')
         filePatterns = config.get<Array<FileConfiguration>>('files', []).map(stub => new FilePattern(stub))
         nodePatterns = config.get<Array<NodeConfiguration>>('nodes', []).map(stub => new NodePattern(stub))
+        textPatterns = config.get<Array<TextConfiguration>>('texts', []).map(stub => new TextPattern(stub))
         jsParserPlugins = config.get<Array<string>>('javascript.parser.plugins')
     }
 
@@ -67,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         // Add node modules which will be shown in VS Code picker
-        if (fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
+        if (/^(java|type)script\w*/.test(currentDocument.languageId) && fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
             const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
 
             items = items.concat(_.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
@@ -88,6 +92,11 @@ export function activate(context: vscode.ExtensionContext) {
                 .value()
             )
         }
+
+        items = items.concat(textPatterns
+            .filter(pattern => pattern.check(currentDocument))
+            .map(pattern => new TextItem(pattern.name))
+        )
 
         // Stop processing if the current editor is not active
         const editor = vscode.window.activeTextEditor
@@ -137,7 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         // Create a snippet
-        let snippet = ''
+        let snippet: string = ''
         let insertAt: string
         if (select instanceof NodeItem) {
             const pattern = nodePatterns.find(pattern => pattern.match(select.name))
@@ -188,9 +197,25 @@ export function activate(context: vscode.ExtensionContext) {
                 selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined,
                 ...Shared,
             })
+
+        } else if (select instanceof TextItem) {
+            const pattern = textPatterns.find(pattern => pattern.name === select.label)
+
+            snippet = pattern.interpolate({
+                _, // Lodash
+                minimatch,
+                path,
+                activeDocument: currentDocument,
+                activeFileInfo: currentFileInfo,
+                ...Shared,
+            })
+
+            // Insert a snippet to the current viewing document
+            // Does not support tab-stop-and-placeholder, for example `${1:index}`
+            return editor.insertSnippet(new vscode.SnippetString(snippet))
         }
 
-        // Write a snippet to the current viewing document
+        // Insert a snippet to the current viewing document
         editor.edit(worker => {
             let position: vscode.Position
             if (insertAt === 'beforeFirstImport' && existingImports.length > 0) {

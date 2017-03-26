@@ -1,5 +1,6 @@
 import * as _ from 'lodash'
 import * as babylon from 'babylon'
+import * as vscode from 'vscode'
 
 export const PATH_SEPARATOR_FOR_WINDOWS = /\\/g
 
@@ -89,4 +90,8 @@ export function findInCodeTree(source: object, target: object) {
 	} else {
 		return undefined
 	}
+}
+
+export function getEndOfLine() {
+	return vscode.workspace.getConfiguration('files').get<string>('eol')
 }

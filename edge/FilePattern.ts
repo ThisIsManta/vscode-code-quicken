@@ -25,9 +25,7 @@ export default class FilePattern implements vscode.Disposable {
 		this.inclusionList = multiPaths.filter(item => item.startsWith('!') === false)
 		this.exclusionList = _.difference(multiPaths, this.inclusionList).map(item => _.trimStart(item, '!'))
 
-
-		const endOfLine = vscode.workspace.getConfiguration('files').get<string>('eol')
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(endOfLine) : config.code)
+		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(Shared.getEndOfLine()) : config.code)
 	}
 
 	check(document: vscode.TextDocument): boolean {
@@ -38,7 +36,7 @@ export default class FilePattern implements vscode.Disposable {
 					minimatch,
 					path,
 					activeDocument: document,
-					activeFile: new FileInfo(document.fileName),
+					activeFileInfo: new FileInfo(document.fileName),
 				}))
 			} catch (ex) {
 				console.error(ex)
