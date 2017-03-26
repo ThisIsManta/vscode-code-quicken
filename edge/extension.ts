@@ -106,12 +106,15 @@ export function activate(context: vscode.ExtensionContext) {
         // Read all import/require statements of the current viewing document (JavaScript only)
         const currentCodeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, jsParserPlugins)
         let existingImports = []
-        let existingRequire = []
         if (currentCodeTree && currentCodeTree.program && currentCodeTree.program.body) {
-            existingImports = currentCodeTree.program.body
+            // For `import ...`
+            existingImports = existingImports.concat(currentCodeTree.program.body
                 .filter((line: any) => line.type === 'ImportDeclaration' && line.source && line.source.type === 'StringLiteral')
                 .map((line: any) => ({ ...line.loc, value: line.source.value }))
-            existingRequire = _.flatten(currentCodeTree.program.body
+            )
+
+            // For `var x = require(...)`
+            existingImports = existingImports.concat(_.flatten(currentCodeTree.program.body
                 .filter((line: any) => line.type === 'VariableDeclaration')
                 .map((line: any) => line.declarations
                     .filter(stub =>
@@ -124,6 +127,12 @@ export function activate(context: vscode.ExtensionContext) {
                     )
                     .map(stub => ({ ...line.loc, value: stub.init.arguments[0].value }))
                 )
+            ))
+
+            // For `require(...)`
+            existingImports = existingImports.concat(currentCodeTree.program.body
+                .filter((line: any) => line.type === 'ExpressionStatement' && line.expression.type === 'CallExpression' && line.expression.callee.type === 'Identifier' && line.expression.callee.name === 'require' && line.expression.arguments.length === 1)
+                .map((line: any) => ({ ...line.loc, value: line.expression.arguments[0].value }))
             )
         }
 
@@ -136,7 +145,7 @@ export function activate(context: vscode.ExtensionContext) {
             insertAt = pattern.insertAt
 
             // Stop processing if the select file does exist in the current viewing document
-            if (existingImports.find(stub => stub.value === select.name) || existingRequire.find(stub => stub.value === select.name)) {
+            if (existingImports.find(stub => stub.value === select.name)) {
                 vscode.window.showInformationMessage(`The module '${select.name}' has been already imported.`)
                 return null
             }
@@ -161,7 +170,7 @@ export function activate(context: vscode.ExtensionContext) {
             const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
             const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
-            if (existingImports.find(stub => stub.value === selectRelativeFilePath) || existingRequire.find(stub => stub.value === selectRelativeFilePath)) {
+            if (existingImports.find(stub => stub.value === selectRelativeFilePath)) {
                 vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                 return null
             }
@@ -187,17 +196,11 @@ export function activate(context: vscode.ExtensionContext) {
             if (insertAt === 'beforeFirstImport' && existingImports.length > 0) {
                 position = new vscode.Position(_.first(existingImports).start.line - 1, _.first(existingImports).start.column)
 
-            } else if (insertAt === 'beforeFirstImport' && existingRequire.length > 0) {
-                position = new vscode.Position(_.first(existingRequire).start.line - 1, _.first(existingRequire).start.column)
-
             } else if (insertAt === 'beforeFirstImport' || insertAt === 'top') {
                 position = new vscode.Position(0, 0)
 
             } else if (insertAt === 'afterLastImport' && existingImports.length > 0) {
                 position = new vscode.Position(_.last(existingImports).end.line, 0)
-
-            } else if (insertAt === 'afterLastImport' && existingRequire.length > 0) {
-                position = new vscode.Position(_.last(existingRequire).end.line, 0)
 
             } else if (insertAt === 'afterLastImport' || insertAt === 'bottom') {
                 position = new vscode.Position(currentDocument.lineCount, 0)
