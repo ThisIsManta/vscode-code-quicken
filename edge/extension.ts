@@ -162,7 +162,7 @@ export function activate(context: vscode.ExtensionContext) {
             const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
             if (existingImports.find(stub => stub.value === selectRelativeFilePath) || existingRequire.find(stub => stub.value === selectRelativeFilePath)) {
-                vscode.window.showErrorMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
+                vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                 return null
             }
 
