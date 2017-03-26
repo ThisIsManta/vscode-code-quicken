@@ -223,15 +223,21 @@ This is similar to [File settings](#file-settings).
 
 ## JavaScript parser settings
 
-This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a JavaScript parser, so it can detect `import` and `export` keywords. You may find the possible values for the plug-in names from [here](https://www.npmjs.com/package/babylon#plugins). The default value is showing below.
+This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a JavaScript parser, so it can detect `import`, `export`, `require` and `module.exports`. You may find the possible values for the plug-in names from [here](https://www.npmjs.com/package/babylon#plugins). The default value is showing below.
 
 ```
 "haste.javascript.parser.plugins": [
-  "classProperties",
+  "jsx",
+  "flow",
+  "doExpressions",
   "objectRestSpread",
+  "decorators",
+  "classProperties",
   "exportExtensions",
   "asyncGenerators",
-  "functionBind"
+  "functionBind",
+  "functionSent",
+  "dynamicImport"
 ]
 ```
 

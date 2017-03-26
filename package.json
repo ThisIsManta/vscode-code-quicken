@@ -156,11 +156,17 @@
                     },
                     "description": "A list of plug-in names for Babylon JavaScript parser.\nSee also https://www.npmjs.com/package/babylon#plugins",
                     "default": [
-                        "classProperties",
+                        "jsx",
+                        "flow",
+                        "doExpressions",
                         "objectRestSpread",
+                        "decorators",
+                        "classProperties",
                         "exportExtensions",
                         "asyncGenerators",
-                        "functionBind"
+                        "functionBind",
+                        "functionSent",
+                        "dynamicImport"
                     ]
                 }
             }
