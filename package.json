@@ -1,6 +1,6 @@
 {
-    "name": "haste",
-    "displayName": "Haste",
+    "name": "code-quicken",
+    "displayName": "Manta's Code Quicken",
     "description": "Create your file-based context-aware snippets.",
     "version": "0.0.1",
     "author": "Anantachai Saothong",
@@ -19,10 +19,10 @@
         "module"
     ],
     "repository": {
-        "url": "https://github.com/ThisIsManta/vscode-haste"
+        "url": "https://github.com/ThisIsManta/vscode-code-quicken"
     },
     "bugs": {
-        "url": "https://github.com/ThisIsManta/vscode-haste/issues"
+        "url": "https://github.com/ThisIsManta/vscode-code-quicken/issues"
     },
     "icon": "misc/icon.png",
     "galleryBanner": {
@@ -33,20 +33,20 @@
         "vscode": "^1.10.0"
     },
     "activationEvents": [
-        "onCommand:haste"
+        "onCommand:codeQuicken"
     ],
     "main": "./dist/extension",
     "contributes": {
         "commands": [
             {
-                "command": "haste",
+                "command": "codeQuicken",
                 "title": "Insert a powerful file-based context-aware snippet"
             }
         ],
         "configuration": {
-            "title": "Haste",
+            "title": "codeQuicken",
             "properties": {
-                "haste.files": {
+                "codeQuicken.files": {
                     "type": "array",
                     "description": "An object containing file snippets.",
                     "items": {
@@ -116,7 +116,7 @@
                         }
                     ]
                 },
-                "haste.nodes": {
+                "codeQuicken.nodes": {
                     "type": "array",
                     "description": "An object containing node module snippets.",
                     "items": {
@@ -157,7 +157,7 @@
                         }
                     ]
                 },
-                "haste.texts": {
+                "codeQuicken.texts": {
                     "type": "array",
                     "description": "An object containing context-aware snippets.",
                     "items": {
@@ -185,7 +185,7 @@
                         }
                     }
                 },
-                "haste.javascript.parser.plugins": {
+                "codeQuicken.javascript.parser.plugins": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -209,7 +209,7 @@
         },
         "keybindings": [
             {
-                "command": "haste",
+                "command": "codeQuicken",
                 "key": "ctrl+shift+i"
             }
         ]

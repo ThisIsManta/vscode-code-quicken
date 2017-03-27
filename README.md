@@ -1,6 +1,6 @@
-# Haste
+# Code Quicken
 
-**Haste** is a powerful **VS Code** extension for creating file-based context-aware snippets, such as `import` and `require` statements in JavaScript.
+**Code Quicken** is a powerful **VS Code** extension for creating file-based context-aware snippets, such as `import` and `require` statements in JavaScript.
 
 This extension is heavily inspired by [**Quick Require**](https://marketplace.visualstudio.com/items?itemName=milkmidi.vs-code-quick-require), but it is written from scratch because the latter one supported only `import` and `require` in JavaScript and could not be customized at all. For example, in some JavaScript convention, you might want to omit the JavaScript file extension (`.js`) and the semi-colon (`;`) at the end of the line, hence it becomes `import MyFile from './MyFile'`.
 
@@ -15,7 +15,7 @@ Simply press _Ctrl+Shift+I_ on your keyboard to list all macthing files, and cho
 Given the below settings, when pressing _Ctrl+Shift+I_, it will list all JavaScript files and insert a snippet `import MyFile from './MyFile.js';` before your first import statement. As you can see, `path` is a glob pattern matching all JavaScript files recusively, `code` is an ES6 template string (actually, it will be passed onto [lodash's template function](https://lodash.com/docs/4.17.4#template)), and `insertAt` represents the position of the code to be inserted.
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": "**/*.js",
     "code": "import ${selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n",
@@ -29,7 +29,7 @@ Given the below settings, when pressing _Ctrl+Shift+I_, it will list all JavaScr
 You can add multiple file patterns, so that it will insert one snippet for one kind of file, while it will insert another snippet for a different kind of file. Let's say you want to import another `js` and `css` files into a JavaScript file, choosing `MyFile.js` will insert `import MyFile from './MyFile.js';`, while choosing `MyDesign.css` will insert `import './MyDesign.css';`.
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": "**/*.js",
     "code": "import ${selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n"
@@ -46,7 +46,7 @@ You can add multiple file patterns, so that it will insert one snippet for one k
 Supposed you want to import one file to two different kind of files, such as importing `MyDesign.css` to both `MyFile.js` and `ChrisDesign.css`. You need two patterns which share the same `path`, but specifying when to use which pattern in `when` expression.
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": "**/*.css",
     "when": "activeFileInfo.fileExtensionWithoutLeadingDot === 'js'",
@@ -69,7 +69,7 @@ When importing JavaScript files, the extension will genuinely check if the chose
 The extension also checks if the importing JavaScript file has `export default` or `module.exports`, so that you can use a variable `selectFileHasDefaultExport` in `code` setting.
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": "**/*.js",
     "code": "import ${selectFileHasDefaultExport ? '' : '* as '}${selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n"
@@ -80,7 +80,7 @@ The extension also checks if the importing JavaScript file has `export default` 
 Instead of writting `import MySuite from './MySuite/index.js';`, you can write `import MySuite from './MySuite';` without specifying `index.js`. This is also possible by turning `omitIndexInSelectFilePath` setting to `true`.
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": "**/*.js",
     "code": "import ${selectFileInfo.fileNameWithExtension === 'index.js' ? selectFileInfo.directoryName : selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n",
@@ -91,10 +91,10 @@ Instead of writting `import MySuite from './MySuite/index.js';`, you can write `
 
 ## Working with **Node.js**
 
-Furthermore, this extension also supports **Node.js** module snippets. The below is the default for `haste.nodes` setting. Since some node modules contain one or more dashes (`-`), which cannot be used in a JavaScript variable, a helping function `getProperVariableName()` can sanitize it. For example, `react-dom` will become `import reactDom from 'react-dom';`.
+Furthermore, this extension also supports **Node.js** module snippets. The below is the default for `codeQuicken.nodes` setting. Since some node modules contain one or more dashes (`-`), which cannot be used in a JavaScript variable, a helping function `getProperVariableName()` can sanitize it. For example, `react-dom` will become `import reactDom from 'react-dom';`.
 
 ```
-"haste.nodes": {
+"codeQuicken.nodes": {
   {
     "name": "*",
     "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n"
@@ -105,7 +105,7 @@ Furthermore, this extension also supports **Node.js** module snippets. The below
 ## File settings
 
 ```
-"haste.files": [
+"codeQuicken.files": [
   {
     "path": string | string[],
     "when": string,
@@ -122,7 +122,7 @@ Furthermore, this extension also supports **Node.js** module snippets. The below
 Specifying an exclamation mark (`!`) in front of the pattern will exclude those files from the list.
 	```
 	// This shows every JavaScript files
-	"haste.files": [
+	"codeQuicken.files": [
 	  {
 		"path": "**/*.js",
 		"code": "import ${selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n"
@@ -131,7 +131,7 @@ Specifying an exclamation mark (`!`) in front of the pattern will exclude those 
 	```
 	```
 	// This shows every JavaScript files, except ones in "node_modules" folder
-	"haste.files": [
+	"codeQuicken.files": [
 	  {
 		"path": ["**/*.js", "!node_modules"],
 		"code": "import ${selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n"
@@ -148,7 +148,7 @@ You may use one or more following pre-defined variables:
   - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current viewing document.
 	```
 	// This shows every JavaScript files when the current viewing file name does not end with ".spec"
-	"haste.files": [
+	"codeQuicken.files": [
 	  {
 		"path": "**/*.js",
 		"when": "activeFileInfo.fileNameWithoutExtension.endsWith('.spec') === false",
@@ -186,7 +186,7 @@ The default value is `cursor`.
 ## Node module settings
 
 ```
-"haste.nodes": [
+"codeQuicken.nodes": [
   {
     "name": string,
     "code": string | string[],
@@ -199,7 +199,7 @@ The default value is `cursor`.
 - `name`: a [glob pattern](https://www.npmjs.com/package/glob#glob-primer) of node module name.  
 	```
 	// This shows every node module that starts with `react`
-	"haste.files": [
+	"codeQuicken.files": [
 	  {
 		"path": "react*",
 		"code": "import ${getProperVariableName(moduleName)} from '${selectFilePath}';\n"
@@ -226,7 +226,7 @@ This is similar to [File settings](#file-settings).
 This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a JavaScript parser, so it can detect `import`, `export`, `require` and `module.exports`. You may find the possible values for the plug-in names from [here](https://www.npmjs.com/package/babylon#plugins). The default value is showing below.
 
 ```
-"haste.javascript.parser.plugins": [
+"codeQuicken.javascript.parser.plugins": [
   "jsx",
   "flow",
   "doExpressions",

@@ -23,7 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
     let jsParserPlugins: Array<string>
 
     function loadLocalConfiguration() {
-        const config = vscode.workspace.getConfiguration('haste')
+        const config = vscode.workspace.getConfiguration('codeQuicken')
         filePatterns = config.get<Array<FileConfiguration>>('files', []).map(stub => new FilePattern(stub))
         nodePatterns = config.get<Array<NodeConfiguration>>('nodes', []).map(stub => new NodePattern(stub))
         textPatterns = config.get<Array<TextConfiguration>>('texts', []).map(stub => new TextPattern(stub))
@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     loadLocalConfiguration()
 
-    context.subscriptions.push(vscode.commands.registerCommand('haste', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('codeQuicken', async () => {
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
         if (vscode.workspace.rootPath === undefined || vscode.window.activeTextEditor === undefined || vscode.window.activeTextEditor.document.isUntitled) {
             return null
