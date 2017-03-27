@@ -1,7 +1,7 @@
 {
     "name": "haste",
     "displayName": "Haste",
-    "description": "Create your file-based powerful snippets.",
+    "description": "Create your file-based context-aware snippets.",
     "version": "0.0.1",
     "author": "Anantachai Saothong",
     "publisher": "thisismanta",
@@ -24,9 +24,9 @@
     "bugs": {
         "url": "https://github.com/ThisIsManta/vscode-haste/issues"
     },
-    "icon": "icon.png",
+    "icon": "misc/icon.png",
     "galleryBanner": {
-        "color": "#283593",
+        "color": "#ffea00",
         "theme": "light"
     },
     "engines": {
@@ -37,6 +37,12 @@
     ],
     "main": "./dist/extension",
     "contributes": {
+        "commands": [
+            {
+                "command": "haste",
+                "title": "Insert a powerful file-based context-aware snippet"
+            }
+        ],
         "configuration": {
             "title": "Haste",
             "properties": {
@@ -201,12 +207,6 @@
                 }
             }
         },
-        "commands": [
-            {
-                "command": "haste",
-                "title": "Inserts a powerful file-based snippet"
-            }
-        ],
         "keybindings": [
             {
                 "command": "haste",
