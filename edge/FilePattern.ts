@@ -31,13 +31,14 @@ export default class FilePattern implements vscode.Disposable {
 	check(document: vscode.TextDocument): boolean {
 		if (this.config.when) {
 			try {
-				return Boolean(_.template('${' + this.config.when + '}')({
+				const result = _.template('${' + this.config.when + '}')({
 					_, // Lodash
 					minimatch,
 					path,
 					activeDocument: document,
 					activeFileInfo: new FileInfo(document.fileName),
-				}))
+				}) as string
+				return !(result === 'false' || result === '' || parseFloat(result) === 0)
 			} catch (ex) {
 				console.error(ex)
 				return false
