@@ -173,6 +173,7 @@ export function activate(context: vscode.ExtensionContext) {
                     activeFileInfo: currentFileInfo,
                     moduleName: select.name,
                     moduleVersion: select.version,
+                    workspacePath: vscode.workspace.rootPath,
                     ...Shared,
                 })
 
@@ -201,6 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
                     selectCodeText: selectCodeText,
                     selectCodeTree: selectCodeTree,
                     selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined,
+                    workspacePath: vscode.workspace.rootPath,
                     ...Shared,
                 })
 
@@ -213,6 +215,7 @@ export function activate(context: vscode.ExtensionContext) {
                     path,
                     activeDocument: currentDocument,
                     activeFileInfo: currentFileInfo,
+                    workspacePath: vscode.workspace.rootPath,
                     ...Shared,
                 })
 
