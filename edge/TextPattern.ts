@@ -18,32 +18,36 @@ export default class TextPattern {
 		this.config = config
 
 		// Escape `${0:var}` to `$\{0:${var}\}`
-		let block = _.isArray(config.code) ? config.code.join(Shared.getEndOfLine()) : config.code
-		block = block.split(/\$\{/).map((chunk, order, array) => {
-			if (order === 0 || /^\d+:/.test(chunk) === false) {
-				return chunk
-			}
-
-			let index = chunk.length
-			while (--index && index >= 0) {
-				if (chunk[index] === '}' && index > 0 && chunk[index - 1] !== '\\') {
-					break
+		const block = (_.isArray(config.code)
+			? config.code.join('\n')
+			: config.code
+		)
+			.split(/\$\{/)
+			.map((chunk, order, array) => {
+				if (order === 0 || /^\d+:/.test(chunk) === false) {
+					return chunk
 				}
-			}
 
-			if (index >= 0) {
-				const colon = chunk.indexOf(':')
-				return '$\\{' + chunk.substring(0, colon) + ':${' + chunk.substring(colon + 1, index).trim() + '}\\}' + chunk.substring(index + 1)
-			} else {
-				return chunk
-			}
-		}).join('')
+				let index = chunk.length
+				while (--index && index >= 0) {
+					if (chunk[index] === '}' && index > 0 && chunk[index - 1] !== '\\') {
+						break
+					}
+				}
 
-		const interpolate = _.template(block)
-		this.interpolate = (scope) => {
+				if (index >= 0) {
+					const colon = chunk.indexOf(':')
+					return '$\\{' + chunk.substring(0, colon) + ':${' + chunk.substring(colon + 1, index).trim() + '}\\}' + chunk.substring(index + 1)
+				} else {
+					return chunk
+				}
+			})
+			.join('')
+
+		this.interpolate = Shared.createTemplate(block, (text: string) => (
 			// Unescape `$\{...\}`
-			return interpolate(scope).replace(/\$\\\{/g, '${').replace(/\\\}/g, '}')
-		}
+			text.replace(/\$\\\{/g, '${').replace(/\\\}/g, '}')
+		))
 	}
 
 	check(document: vscode.TextDocument): boolean {

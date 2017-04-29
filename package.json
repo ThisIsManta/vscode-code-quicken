@@ -10,12 +10,9 @@
     ],
     "keywords": [
         "import",
-        "export",
         "require",
         "javascript",
-        "typescript",
         "file",
-        "node",
         "module"
     ],
     "repository": {
@@ -30,25 +27,40 @@
         "theme": "light"
     },
     "engines": {
-        "vscode": "^1.10.0"
+        "vscode": "^1.11.0"
     },
     "activationEvents": [
-        "onCommand:codeQuicken"
+        "onCommand:codeQuicken.showAll",
+        "onCommand:codeQuicken.showFiles",
+        "onCommand:codeQuicken.showNodes",
+        "onCommand:codeQuicken.showTexts"
     ],
     "main": "./dist/extension",
     "contributes": {
         "commands": [
             {
-                "command": "codeQuicken",
-                "title": "Insert a powerful file-based context-aware snippet"
+                "command": "codeQuicken.showAll",
+                "title": "Insert a file-based or node-module context-aware snippet"
+            },
+            {
+                "command": "codeQuicken.showFiles",
+                "title": "Insert a file-based context-aware snippet"
+            },
+            {
+                "command": "codeQuicken.showNodes",
+                "title": "Insert a Node-module context-aware snippet"
+            },
+            {
+                "command": "codeQuicken.showTexts",
+                "title": "Insert a context-aware snippet"
             }
         ],
         "configuration": {
-            "title": "codeQuicken",
+            "title": "Code Quicken",
             "properties": {
                 "codeQuicken.files": {
+                    "description": "Represent file snippets.",
                     "type": "array",
-                    "description": "An object containing file snippets.",
                     "items": {
                         "type": "object",
                         "required": [
@@ -57,40 +69,46 @@
                         ],
                         "properties": {
                             "path": {
+                                "description": "Represent a glob pattern of files to be listed in the quick pick.\nSpecifying an exclamation mark (!) in front of the pattern will exclude those files from the list.",
                                 "type": [
                                     "string",
                                     "array"
                                 ],
                                 "items": {
                                     "type": "string"
-                                },
-                                "description": "A glob pattern of files to be listed in the quick pick.\nSpecifying an exclamation mark (!) in front of the pattern will exclude those files from the list."
+                                }
                             },
                             "when": {
-                                "type": "string",
-                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
+                                "description": "Control when this pattern is available against the current active document.",
+                                "type": "string"
                             },
                             "code": {
+                                "description": "Represent the code to be inserted to the current active document.",
                                 "type": [
                                     "string",
                                     "array"
-                                ],
-                                "description": "An ES6 template string to be inserted to the current viewing document."
+                                ]
+                            },
+                            "checkForImportOrRequire": {
+                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
+                                "type": "boolean",
+                                "default": false
                             },
                             "omitIndexInSelectFilePath": {
+                                "description": "Strip a file named `index` to its directory name.",
                                 "type": "boolean",
-                                "description": "A boolean to control whether a file named `index` must not present in the variable `selectFilePath` of `code` setting.",
                                 "default": false
                             },
                             "omitExtensionInSelectFilePath": {
+                                "description": "Remove file extension from `selectFilePath` variable in `code`.\nSpecifying `true` will strip all extension from `selectFilePath` variable of `code` setting.",
                                 "type": [
                                     "boolean",
                                     "string"
                                 ],
-                                "description": "A boolean or glob pattern of file extensions to remove from `selectFilePath` variable of `code` setting.\nSpecifying `true` will strip all extension from `selectFilePath` variable of `code` setting.",
                                 "default": false
                             },
                             "insertAt": {
+                                "description": "Insert the code to the select position of the current active document.",
                                 "enum": [
                                     "beforeFirstImport",
                                     "afterLastImport",
@@ -98,7 +116,6 @@
                                     "bottom",
                                     "cursor"
                                 ],
-                                "description": "A position of code to be inserted to the current viewing document.",
                                 "default": "cursor"
                             }
                         }
@@ -107,6 +124,7 @@
                         {
                             "path": "**/*.js",
                             "code": "import ${selectFileHasDefaultExport ? '' : '* as '}${getProperVariableName(selectFileInfo.fileNameWithoutExtension)} from '${selectFilePath}';\n",
+                            "checkForImportOrRequire": true,
                             "insertAt": "beforeFirstImport"
                         },
                         {
@@ -118,7 +136,7 @@
                 },
                 "codeQuicken.nodes": {
                     "type": "array",
-                    "description": "An object containing node module snippets.",
+                    "description": "Represent node module snippets.",
                     "items": {
                         "type": "object",
                         "required": [
@@ -127,17 +145,23 @@
                         ],
                         "properties": {
                             "name": {
-                                "type": "string",
-                                "description": "A glob pattern of node module name."
+                                "description": "A glob pattern of node module name.",
+                                "type": "string"
                             },
                             "code": {
+                                "description": "Represent the code to be inserted to the current active document.",
                                 "type": [
                                     "string",
                                     "array"
-                                ],
-                                "description": "A snippet to be inserted to the current viewing document."
+                                ]
+                            },
+                            "checkForImportOrRequire": {
+                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
+                                "type": "boolean",
+                                "default": false
                             },
                             "insertAt": {
+                                "description": "Insert the code to the select position of the current active document.",
                                 "enum": [
                                     "beforeFirstImport",
                                     "afterLastImport",
@@ -145,7 +169,6 @@
                                     "bottom",
                                     "cursor"
                                 ],
-                                "description": "A position of code to be inserted to the current viewing document.",
                                 "default": "cursor"
                             }
                         }
@@ -153,13 +176,14 @@
                     "default": [
                         {
                             "name": "*",
-                            "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n"
+                            "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n",
+                            "checkForImportOrRequire": true
                         }
                     ]
                 },
                 "codeQuicken.texts": {
                     "type": "array",
-                    "description": "An object containing context-aware snippets.",
+                    "description": "Represent text snippets.",
                     "items": {
                         "type": "object",
                         "required": [
@@ -168,19 +192,19 @@
                         ],
                         "properties": {
                             "name": {
-                                "type": "string",
-                                "description": "A name of this snippet."
-                            },
-                            "when": {
-                                "type": "string",
-                                "description": "A JavaScript boolean expression to control when this pattern is available against the current viewing document."
+                                "description": "Represent a name of this snippet.",
+                                "type": "string"
                             },
                             "code": {
+                                "description": "Represent the code to be inserted to the current active document.",
                                 "type": [
                                     "string",
                                     "array"
-                                ],
-                                "description": "A snippet to be inserted to the current viewing document."
+                                ]
+                            },
+                            "when": {
+                                "description": "Control when this pattern is available against the current active document.",
+                                "type": "string"
                             }
                         }
                     }
@@ -209,7 +233,7 @@
         },
         "keybindings": [
             {
-                "command": "codeQuicken",
+                "command": "codeQuicken.showAll",
                 "key": "ctrl+shift+i"
             }
         ]
@@ -225,7 +249,7 @@
         "@types/minimatch": "^2.0.29",
         "@types/node": "^6.0.40",
         "typescript": "^2.0.3",
-        "vscode": "^1.0.0"
+        "vscode": "^1.1.0"
     },
     "dependencies": {
         "babylon": "^6.16.1",

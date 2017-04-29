@@ -8,6 +8,10 @@ export default class NodePattern {
 	private config: NodeConfiguration
 	readonly interpolate: (object) => string
 
+	get checkForImportOrRequire() {
+		return this.config.checkForImportOrRequire
+	}
+
 	get insertAt() {
 		return this.config.insertAt
 	}
@@ -15,7 +19,7 @@ export default class NodePattern {
 	constructor(config: NodeConfiguration) {
 		this.config = config
 
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(Shared.getEndOfLine()) : config.code)
+		this.interpolate = Shared.createTemplate(config.code)
 	}
 
 	match(moduleName: string): boolean {

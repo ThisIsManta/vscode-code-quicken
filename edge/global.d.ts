@@ -2,6 +2,7 @@ interface FileConfiguration {
 	path: string | Array<string>
 	code: string | string[]
 	when?: string
+	checkForImportOrRequire: boolean,
 	interpolate: (object) => string
 	omitIndexInSelectFilePath: boolean
 	omitExtensionInSelectFilePath: boolean | string
@@ -12,6 +13,7 @@ interface NodeConfiguration {
 	name: string
 	code: string | string[]
 	when?: string
+	checkForImportOrRequire: boolean,
 	insertAt: string
 }
 

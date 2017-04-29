@@ -27,8 +27,28 @@ export const MODULE_EXPORTS = {
 }
 
 export const MODULE_REQUIRE = {
-	type:'VariableDeclaration',
-	
+	type: 'VariableDeclarator',
+	init: {
+		type: 'CallExpression',
+		callee: {
+			type: 'Identifier',
+			name: 'require'
+		},
+		arguments: [
+			{ type: 'StringLiteral' }
+		]
+	}
+}
+
+export const MODULE_REQUIRE_IMMEDIATE = {
+	type: 'ExpressionStatement',
+	expression: {
+		type: 'CallExpression',
+		callee: {
+			type: 'Identifier',
+			name: 'require'
+		}
+	}
 }
 
 export function getProperVariableName(fileName: string) {
@@ -51,6 +71,32 @@ export function getProperVariableName(fileName: string) {
 	}
 
 	return parts.join('')
+}
+
+export function createTemplate(code: string | Array<string>, postProcessor?: (string) => string) {
+	if (_.isArray(code)) {
+		code = code.join('\n')
+	} else {
+		code = code.replace(/\r\n/g, '\n')
+	}
+	const template = _.template(code)
+
+	return (context: { activeDocument: vscode.TextDocument }) => {
+		const targetIndent = (vscode.window.activeTextEditor.options.insertSpaces as boolean) ? (' '.repeat(vscode.window.activeTextEditor.options.tabSize as number)) : '\t'
+		let text = template(context)
+			.split('\n')
+			.map(line => line.startsWith('\t')
+				? line.replace(/^\t/g, originalIndent => targetIndent.repeat(originalIndent.length))
+				: line
+			)
+			.join(context.activeDocument.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
+
+		if (postProcessor) {
+			text = postProcessor(text)
+		}
+
+		return text
+	}
 }
 
 export function getCodeTree(text: string, fileExtensionOrLanguageId: string, plugins = []): any {

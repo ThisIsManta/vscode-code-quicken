@@ -14,6 +14,10 @@ export default class FilePattern implements vscode.Disposable {
 	private fileCache: Array<vscode.Uri> = null
 	private fileWatch: vscode.FileSystemWatcher = null
 
+	get checkForImportOrRequire() {
+		return this.config.checkForImportOrRequire
+	}
+
 	get insertAt() {
 		return this.config.insertAt
 	}
@@ -25,7 +29,7 @@ export default class FilePattern implements vscode.Disposable {
 		this.inclusionList = multiPaths.filter(item => item.startsWith('!') === false)
 		this.exclusionList = _.difference(multiPaths, this.inclusionList).map(item => _.trimStart(item, '!'))
 
-		this.interpolate = _.template(_.isArray(config.code) ? config.code.join(Shared.getEndOfLine()) : config.code)
+		this.interpolate = Shared.createTemplate(config.code)
 	}
 
 	check(document: vscode.TextDocument): boolean {
