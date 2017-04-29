@@ -62,14 +62,14 @@ export default class FilePattern implements vscode.Disposable {
 	}
 
 	getRelativeFilePath(fileInfo: FileInfo, currentDirectoryPath: string) {
-		let relativeFilePath = fileInfo.getRelativePath(currentDirectoryPath)
-		if (this.config.omitIndexInSelectFilePath && fileInfo.fileNameWithoutExtension === 'index') {
-			relativeFilePath = _.trimEnd(relativeFilePath.substring(0, relativeFilePath.length - fileInfo.fileNameWithExtension.length), '/')
+		const relativeFilePath = fileInfo.getRelativePath(currentDirectoryPath)
 
-		} else if (this.config.omitExtensionInSelectFilePath === true || typeof this.config.omitExtensionInSelectFilePath === 'string' && minimatch([fileInfo.fileExtensionWithoutLeadingDot], this.config.omitExtensionInSelectFilePath).length > 0) {
-			relativeFilePath = relativeFilePath.substring(0, relativeFilePath.length - 1 - fileInfo.fileExtensionWithoutLeadingDot.length)
+		if (this.config.omitExtensionInSelectFilePath === true || typeof this.config.omitExtensionInSelectFilePath === 'string' && minimatch([fileInfo.fileExtensionWithoutLeadingDot], this.config.omitExtensionInSelectFilePath).length > 0) {
+			return relativeFilePath.substring(0, relativeFilePath.length - 1 - fileInfo.fileExtensionWithoutLeadingDot.length)
+
+		} else {
+			return relativeFilePath
 		}
-		return relativeFilePath
 	}
 
 	async getFileLinks() {

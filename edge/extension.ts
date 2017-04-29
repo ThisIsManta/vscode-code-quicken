@@ -203,6 +203,7 @@ export function activate(context: vscode.ExtensionContext) {
                     selectCodeTree: selectCodeTree,
                     selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined,
                     workspacePath: vscode.workspace.rootPath,
+                    isIndexFile: select.fileInfo.fileNameWithoutExtension === 'index' && select.fileInfo.directoryPath !== currentFileInfo.directoryPath,
                     ...Shared,
                 })
 

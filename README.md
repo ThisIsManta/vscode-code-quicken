@@ -77,18 +77,6 @@ The extension also checks if the importing JavaScript file has `export default` 
 ]
 ```
 
-Instead of writting `import MySuite from './MySuite/index.js';`, you can write `import MySuite from './MySuite';` without specifying `index.js`. This is also possible by turning `omitIndexInSelectFilePath` setting to `true`.
-
-```
-"codeQuicken.files": [
-  {
-    "path": "**/*.js",
-    "code": "import ${selectFileInfo.fileNameWithExtension === 'index.js' ? selectFileInfo.directoryName : selectFileInfo.fileNameWithoutExtension} from '${selectFilePath}';\n",
-    "omitIndexInSelectFilePath": true
-  }
-]
-```
-
 ## Working with **Node.js**
 
 Furthermore, this extension also supports **Node.js** module snippets. The below is the default for `codeQuicken.nodes` setting. Since some node modules contain one or more dashes (`-`), which cannot be used in a JavaScript variable, a helping function `getProperVariableName()` can sanitize it. For example, `react-dom` will become `import reactDom from 'react-dom';`.
@@ -110,7 +98,6 @@ Furthermore, this extension also supports **Node.js** module snippets. The below
     "path": string | string[],
     "when": string,
     "code": string | string[],
-    "omitIndexInSelectFilePath": boolean,
     "omitExtensionInSelectFilePath": boolean | string,
     "insertAt": string
   },
@@ -139,13 +126,13 @@ Specifying an exclamation mark (`!`) in front of the pattern will exclude those 
 	]
 	```
 
-- `when`: a JavaScript boolean expression to control when this pattern is available against the current viewing document.  
+- `when`: a JavaScript boolean expression to control when this pattern is available against the current active document.  
 You may use one or more following pre-defined variables:
   - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
-  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current viewing document.
+  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
 	```
 	// This shows every JavaScript files when the current viewing file name does not end with ".spec"
 	"codeQuicken.files": [
@@ -157,29 +144,27 @@ You may use one or more following pre-defined variables:
 	]
 	```
 
-- `code`: an ES6 template string to be inserted to the current viewing document.  
+- `code`: an ES6 template string to be inserted to the current active document.  
 You may use one or more following pre-defined variables:
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
-  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current viewing document.
+  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
   - `selectFileInfo` as [FileInfo](#fileinfo-properties) object of the chosen file.
-  - `selectFilePath` as a normalized _relative file path_ of the chosen file. This has `./` at the beginning if and only if the chosen file and the current viewing document are in the same folder. This can be used safely in JavaScript `import` statement.
+  - `selectFilePath` as a normalized _relative file path_ of the chosen file. This has `./` at the beginning if and only if the chosen file and the current active document are in the same folder. This can be used safely in JavaScript `import` statement.
   - `selectCodeText` as a whole text of the chosen file.
   - `selectCodeTree` as a parsed **[Babylon](https://www.npmjs.com/package/babylon)** object of the chosen file.
   - `selectFileHasDefaultExport` as boolean that is `true` when the chosen file has `export default` or `module.exports`, otherwise `false`.
-  - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
+  - `isIndexFile` as boolean that is `true` when the chosen file is named "index" and does not share the same directory as the current active document, otherwise `false`.
+    - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
   - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
   - `findInCodeTree(codeTree, object)` as a helping function that returns `true` if and only if at least one branch in the given `codeTree` matches the given `object`, otherwise `false`.
 
-- `omitIndexInSelectFilePath`: a boolean to control whether a file named `index` must not present in the variable `selectFilePath` of `code` setting.  
-The default value is `false`.
-
 - `omitExtensionInSelectFilePath`: a boolean or glob pattern of file extensions to remove from `selectFilePath` variable of `code` setting.  
 Specifying `true` will strip all extension from `selectFilePath` variable of `code` setting.  
 The default value is `false`.
 
-- `insertAt`: a position of code to be inserted to the current viewing document.  
+- `insertAt`: a position of code to be inserted to the current active document.  
 The possible values are: `"beforeFirstImport"`, `"afterLastImport"`, `"top"`, `"bottom"`, `"cursor"`.  
 The default value is `cursor`.
 
@@ -207,10 +192,10 @@ The default value is `cursor`.
 	]
 	```
 
-- `code`: an ES6 template string to be inserted to the current viewing document.  
+- `code`: an ES6 template string to be inserted to the current active document.  
 You may use one or more following pre-defined variables:
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
-  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current viewing document.
+  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
   - `moduleName` as the name of the select node module.
   - `moduleVersion` as a version written in _package.json_ inside the select node module.
   - `_` as [lodash](https://www.npmjs.com/package/lodash).
@@ -218,7 +203,7 @@ You may use one or more following pre-defined variables:
   - `path` as [path](https://nodejs.org/api/path.html).
   - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
 
-- `insertAt`: a position of code to be inserted to the current viewing document.  
+- `insertAt`: a position of code to be inserted to the current active document.  
 This is similar to [File settings](#file-settings).
 
 ## JavaScript parser settings

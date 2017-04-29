@@ -4,7 +4,6 @@ interface FileConfiguration {
 	when?: string
 	checkForImportOrRequire: boolean,
 	interpolate: (object) => string
-	omitIndexInSelectFilePath: boolean
 	omitExtensionInSelectFilePath: boolean | string
 	insertAt: string
 }

@@ -89,11 +89,6 @@
                                     "array"
                                 ]
                             },
-                            "omitIndexInSelectFilePath": {
-                                "description": "Replace a file named `index` with its directory name.",
-                                "type": "boolean",
-                                "default": false
-                            },
                             "omitExtensionInSelectFilePath": {
                                 "description": "Remove file extension from `selectFilePath` variable in `code`.\nSpecifying `true` will strip all extension from `selectFilePath` variable of `code` setting.",
                                 "type": [
