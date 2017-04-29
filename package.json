@@ -89,13 +89,8 @@
                                     "array"
                                 ]
                             },
-                            "checkForImportOrRequire": {
-                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
-                                "type": "boolean",
-                                "default": false
-                            },
                             "omitIndexInSelectFilePath": {
-                                "description": "Strip a file named `index` to its directory name.",
+                                "description": "Replace a file named `index` with its directory name.",
                                 "type": "boolean",
                                 "default": false
                             },
@@ -105,6 +100,11 @@
                                     "boolean",
                                     "string"
                                 ],
+                                "default": false
+                            },
+                            "checkForImportOrRequire": {
+                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
+                                "type": "boolean",
                                 "default": false
                             },
                             "insertAt": {
@@ -195,16 +195,16 @@
                                 "description": "Represent a name of this snippet.",
                                 "type": "string"
                             },
+                            "when": {
+                                "description": "Control when this pattern is available against the current active document.",
+                                "type": "string"
+                            },
                             "code": {
                                 "description": "Represent the code to be inserted to the current active document.",
                                 "type": [
                                     "string",
                                     "array"
                                 ]
-                            },
-                            "when": {
-                                "description": "Control when this pattern is available against the current active document.",
-                                "type": "string"
                             }
                         }
                     }
