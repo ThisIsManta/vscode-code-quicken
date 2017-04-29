@@ -79,7 +79,13 @@ export function createTemplate(code: string | Array<string>, postProcessor?: (st
 	} else {
 		code = code.replace(/\r\n/g, '\n')
 	}
-	const template = _.template(code)
+	let template
+
+	try {
+		template = _.template(code)
+	} catch (ex) {
+		throw new Error('Error parsing: ' + code + '\n' + ex.message)
+	}
 
 	return (context: { activeDocument: vscode.TextDocument }) => {
 		const targetIndent = (vscode.window.activeTextEditor.options.insertSpaces as boolean) ? (' '.repeat(vscode.window.activeTextEditor.options.tabSize as number)) : '\t'
