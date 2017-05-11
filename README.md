@@ -154,7 +154,7 @@ You may use one or more following pre-defined variables:
   - `selectCodeTree` as a parsed **[Babylon](https://www.npmjs.com/package/babylon)** object of the chosen file.
   - `selectFileHasDefaultExport` as boolean that is `true` when the chosen file has `export default` or `module.exports`, otherwise `false`.
   - `isIndexFile` as boolean that is `true` when the chosen file is named "index" and does not share the same directory as the current active document, otherwise `false`.
-    - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
+  - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
   - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
