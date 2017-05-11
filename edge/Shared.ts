@@ -54,12 +54,11 @@ export const MODULE_REQUIRE_IMMEDIATE = {
 export function getProperVariableName(fileName: string) {
 	const words = _.words(fileName)
 
-	let pivot = 0
 	let parts = []
-	words.forEach(word => {
-		const index = fileName.indexOf(word, pivot)
-		parts.push((fileName.substring(pivot, index).match(/[_\$]+/g) || []).join(''))
-		parts.push(_.upperFirst(word))
+	words.forEach((word, rank) => {
+		const index = fileName.indexOf(word)
+		parts.push((fileName.substring(0, index).match(/[_\$]+/g) || []).join(''))
+		parts.push(rank === 0 ? word : _.upperFirst(word))
 	})
 
 	parts = _.compact(parts)
