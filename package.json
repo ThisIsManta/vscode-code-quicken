@@ -20,7 +20,7 @@
     "bugs": {
         "url": "https://github.com/ThisIsManta/vscode-code-quicken/issues"
     },
-    "icon": "misc/icon.png",
+    "icon": "misc/logo.svg",
     "galleryBanner": {
         "color": "#ffea00",
         "theme": "light"
