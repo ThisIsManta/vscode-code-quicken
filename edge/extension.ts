@@ -132,7 +132,7 @@ export function activate(context: vscode.ExtensionContext) {
                 // For `import ...`
                 existingImports = existingImports.concat(currentCodeTree.program.body
                     .filter((line: any) => line.type === 'ImportDeclaration' && line.source && line.source.type === 'StringLiteral')
-                    .map((line: any) => ({ ...line.loc, value: line.source.value }))
+                    .map((line: any) => ({ ...line.loc, name: _.get(_.find(line.specifiers, (spec: any) => spec.type === 'ImportDefaultSpecifier'), 'local.name'), path: line.source.value }))
                 )
 
                 // For `var x = require(...)`
@@ -140,32 +140,28 @@ export function activate(context: vscode.ExtensionContext) {
                     .filter((line: any) => line.type === 'VariableDeclaration')
                     .map((line: any) => line.declarations
                         .filter(stub => _.isMatch(stub, Shared.MODULE_REQUIRE))
-                        .map(stub => ({ ...line.loc, value: stub.init.arguments[0].value }))
+                        .map(stub => ({ ...line.loc, name: stub.id.name, path: stub.init.arguments[0].value }))
                     )
                 ))
 
                 // For `require(...)`
                 existingImports = existingImports.concat(currentCodeTree.program.body
                     .filter((stub: any) => _.isMatch(stub, Shared.MODULE_REQUIRE_IMMEDIATE) && stub.expression.arguments.length === 1)
-                    .map((stub: any) => ({ ...stub.loc, value: stub.expression.arguments[0].value }))
+                    .map((stub: any) => ({ ...stub.loc, path: stub.expression.arguments[0].value }))
                 )
             }
 
             // Create a snippet
-            let snippet: string = ''
-            let insertAt: string
             if (select instanceof NodeItem) {
                 const pattern = nodePatterns.find(pattern => pattern.match(select.name))
 
-                insertAt = pattern.insertAt
-
                 // Stop processing if the select file does exist in the current viewing document
-                if (pattern.checkForImportOrRequire && existingImports.find(stub => stub.value === select.name)) {
+                if (pattern.checkForImportOrRequire && existingImports.find(stub => stub.path === select.name)) {
                     vscode.window.showInformationMessage(`The module '${select.name}' has been already imported.`)
                     return null
                 }
 
-                snippet = pattern.interpolate({
+                const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
                     path,
@@ -177,21 +173,16 @@ export function activate(context: vscode.ExtensionContext) {
                     ...Shared,
                 })
 
+                insertCode(pattern.insertAt, snippet)
+
             } else if (select instanceof FileItem) {
                 const pattern = filePatterns.find(pattern => pattern.match(select.fileInfo.localPath) && pattern.check(currentDocument))
-
-                insertAt = pattern.insertAt
 
                 const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
                 const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
                 const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
-                if (pattern.checkForImportOrRequire && existingImports.find(stub => stub.value === selectRelativeFilePath)) {
-                    vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
-                    return null
-                }
-
-                snippet = pattern.interpolate({
+                const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
                     path,
@@ -207,10 +198,30 @@ export function activate(context: vscode.ExtensionContext) {
                     ...Shared,
                 })
 
+                if (pattern.checkForImportOrRequire) {
+                    if (existingImports.find(stub => stub.value === selectRelativeFilePath)) {
+                        vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
+                        return null
+                    } else {
+                        const snippetTree = Shared.getCodeTree(snippet, currentDocument.languageId, jsParserPlugins)
+                        const importedVariableName = _.get(snippetTree, 'program.body.0.specifiers.0.local.name', null)
+                        const duplicateImport = existingImports.find(stub => stub.name === importedVariableName)
+                        if (duplicateImport) {
+                            editor.edit(worker => {
+                                const range = new vscode.Range(duplicateImport.start.line - 1, duplicateImport.start.column, duplicateImport.end.line - 1, duplicateImport.end.column)
+                                worker.replace(range, snippet.trim())
+                            })
+                            return null
+                        }
+                    }
+                }
+
+                insertCode(pattern.insertAt, snippet)
+
             } else if (select instanceof TextItem) {
                 const pattern = textPatterns.find(pattern => pattern.name === select.label)
 
-                snippet = pattern.interpolate({
+                const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
                     path,
@@ -221,31 +232,34 @@ export function activate(context: vscode.ExtensionContext) {
                 })
 
                 // Insert a snippet to the current viewing document
-                // Does not support tab-stop-and-placeholder, for example `${1:index}`
-                return editor.insertSnippet(new vscode.SnippetString(snippet))
+                // Currently does not support tab-stop-and-placeholder, for example `${1:index}`
+                editor.insertSnippet(new vscode.SnippetString(snippet))
             }
 
-            // Insert a snippet to the current viewing document
-            editor.edit(worker => {
-                let position: vscode.Position
-                if (insertAt === 'beforeFirstImport' && existingImports.length > 0) {
-                    position = new vscode.Position(_.first(existingImports).start.line - 1, _.first(existingImports).start.column)
+            function insertCode(insertAt: string, snippet: string) {
+                editor.edit(worker => {
+                    let position: vscode.Position
+                    if (position === undefined) {
+                        if (insertAt === 'beforeFirstImport' && existingImports.length > 0) {
+                            position = new vscode.Position(_.first(existingImports).start.line - 1, _.first(existingImports).start.column)
 
-                } else if (insertAt === 'beforeFirstImport' || insertAt === 'top') {
-                    position = new vscode.Position(0, 0)
+                        } else if (insertAt === 'beforeFirstImport' || insertAt === 'top') {
+                            position = new vscode.Position(0, 0)
 
-                } else if (insertAt === 'afterLastImport' && existingImports.length > 0) {
-                    position = new vscode.Position(_.last(existingImports).end.line, 0)
+                        } else if (insertAt === 'afterLastImport' && existingImports.length > 0) {
+                            position = new vscode.Position(_.last(existingImports).end.line, 0)
 
-                } else if (insertAt === 'afterLastImport' || insertAt === 'bottom') {
-                    position = new vscode.Position(currentDocument.lineCount, 0)
+                        } else if (insertAt === 'afterLastImport' || insertAt === 'bottom') {
+                            position = new vscode.Position(currentDocument.lineCount, 0)
 
-                } else {
-                    position = editor.selection.active
-                }
+                        } else {
+                            position = editor.selection.active
+                        }
+                    }
 
-                worker.insert(position, snippet);
-            })
+                    worker.insert(position, snippet)
+                })
+            }
         }
     }
 }
