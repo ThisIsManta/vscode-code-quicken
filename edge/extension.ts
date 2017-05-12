@@ -262,6 +262,64 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }
     }
+
+    context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.fixImports', async () => {
+        const currentDocument = vscode.window.activeTextEditor.document
+        const currentFileInfo = new FileInfo(currentDocument.fileName)
+
+        await vscode.window.withProgress({ title: 'Fixing invalid import statements', location: vscode.ProgressLocation.Window }, async () => {
+            const codeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, jsParserPlugins)
+            const invalidImportList = codeTree.program.body
+                .filter(node => node.type === 'ImportDeclaration' && node.source.value.startsWith('.'))
+                .filter(node =>
+                    fs.existsSync(path.join(currentFileInfo.directoryPath, node.source.value)) === false &&
+                    fs.existsSync(path.join(currentFileInfo.directoryPath, node.source.value + '.js')) === false
+                )
+
+            for (let index = 0; index < invalidImportList.length; index++) {
+                const node = invalidImportList[index]
+                const fileName = _.last(node.source.value.split(/\\|\//))
+
+                let modifiedImportList = _.flatten([
+                    await vscode.workspace.findFiles('**/' + fileName, null, 10),
+                    await vscode.workspace.findFiles('**/' + fileName + '.js', null, 10),
+                ]).map(uri => {
+                    const fileInfo = new FileInfo(uri.fsPath)
+                    const filePath = fileInfo.getRelativePath(currentFileInfo.directoryPath)
+                    const fileExtn = path.extname(filePath)
+                    if (node.source.value.endsWith(fileExtn)) {
+                        return filePath
+                    } else {
+                        return filePath.substring(0, filePath.length - fileExtn.length)
+                    }
+                })
+                if (modifiedImportList.length === 1) {
+                    node.source.newValue = modifiedImportList[0]
+                } else {
+                    const originalDirectoryName = _.last(node.source.value.split(/\\|\//).slice(-2, -1))
+                    modifiedImportList = modifiedImportList.filter(filePath => {
+                        const modifiedDirectoryName = _.last(filePath.split(/\\|\//).slice(-2, -1))
+                        return originalDirectoryName === modifiedDirectoryName
+                    })
+                    if (modifiedImportList.length === 1) {
+                        node.source.newValue = modifiedImportList[0]
+                    }
+                }
+            }
+
+            const editor = vscode.window.activeTextEditor
+            if (!editor) {
+                return null
+            }
+
+            editor.edit(worker => {
+                invalidImportList.filter(node => node.source.newValue !== undefined).forEach(node => {
+                    const range = new vscode.Range(node.source.loc.start.line - 1, node.source.loc.start.column, node.source.loc.end.line - 1, node.source.loc.end.column)
+                    worker.replace(range, "'" + node.source.newValue + "'")
+                })
+            })
+        })
+    }))
 }
 
 export function deactivate() {

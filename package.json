@@ -2,7 +2,7 @@
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
     "description": "Create your file-based context-aware snippets.",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "thisismanta",
     "categories": [
         "Snippets"
@@ -26,13 +26,14 @@
         "theme": "light"
     },
     "engines": {
-        "vscode": "^1.11.0"
+        "vscode": "^1.12.0"
     },
     "activationEvents": [
         "onCommand:codeQuicken.showAll",
         "onCommand:codeQuicken.showFiles",
         "onCommand:codeQuicken.showNodes",
-        "onCommand:codeQuicken.showTexts"
+        "onCommand:codeQuicken.showTexts",
+        "onCommand:codeQuicken.fixImports"
     ],
     "main": "./dist/extension",
     "contributes": {
@@ -52,6 +53,10 @@
             {
                 "command": "codeQuicken.showTexts",
                 "title": "Insert a context-aware snippet"
+            },
+            {
+                "command": "codeQuicken.fixImports",
+                "title": "Fix invalid-path import statements"
             }
         ],
         "configuration": {
@@ -248,6 +253,7 @@
     },
     "dependencies": {
         "babylon": "^6.16.1",
+        "glob": "^7.1.1",
         "lodash": "^4.17.4",
         "minimatch": "^3.0.3"
     }

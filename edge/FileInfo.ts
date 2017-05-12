@@ -22,8 +22,8 @@ export default class FileInfo {
 		this.directoryName = _.last(path.dirname(this.localPath).split(path.sep))
 	}
 
-	getRelativePath(rootPath: string) {
-		let relativePath = path.relative(rootPath, this.localPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
+	getRelativePath(directoryPath: string) {
+		let relativePath = path.relative(directoryPath, this.localPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
 		if (relativePath.startsWith('../') === false) {
 			relativePath = './' + relativePath
 		}
