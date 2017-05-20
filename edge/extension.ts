@@ -176,7 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
                 insertCode(pattern.insertAt, snippet)
 
             } else if (select instanceof FileItem) {
-                const pattern = filePatterns.find(pattern => pattern.match(select.fileInfo.localPath) && pattern.check(currentDocument))
+                const pattern = filePatterns.find(pattern => pattern.match(select.fileInfo) && pattern.check(currentDocument))
 
                 const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
                 const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)

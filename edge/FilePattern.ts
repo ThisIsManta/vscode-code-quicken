@@ -51,13 +51,13 @@ export default class FilePattern implements vscode.Disposable {
 		return true
 	}
 
-	match(localPath: string): boolean {
-		let pathInUnixStyleThatIsRelativeToRootPath = localPath
-		if (localPath.startsWith(vscode.workspace.rootPath)) {
-			pathInUnixStyleThatIsRelativeToRootPath = _.trimStart(localPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
+	match(fileInfo: FileInfo): boolean {
+		let pathThatIsRelativeToRootPath = fileInfo.localPath
+		if (pathThatIsRelativeToRootPath.startsWith(vscode.workspace.rootPath)) {
+			pathThatIsRelativeToRootPath = _.trimStart(pathThatIsRelativeToRootPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
 		}
 
-		const matcher = (glob) => minimatch([pathInUnixStyleThatIsRelativeToRootPath], glob).length > 0
+		const matcher = (glob) => minimatch([pathThatIsRelativeToRootPath], glob).length > 0
 		return this.inclusionList.some(matcher) && !this.exclusionList.some(matcher)
 	}
 
@@ -93,7 +93,7 @@ export default class FilePattern implements vscode.Disposable {
 			try {
 				this.fileWatch = vscode.workspace.createFileSystemWatcher(path.join(vscode.workspace.rootPath, inclusionPath))
 				this.fileWatch.onDidCreate(fileLink => {
-					if (this.match(fileLink.fsPath)) {
+					if (this.match(new FileInfo(fileLink.fsPath))) {
 						this.fileCache.push(fileLink)
 					}
 				})
