@@ -2,7 +2,7 @@
 
 **Code Quicken** is a powerful **VS Code** extension for creating file-based context-aware snippets, such as `import` and `require` statements in JavaScript.
 
-This extension is heavily inspired by [**Quick Require**](https://marketplace.visualstudio.com/items?itemName=milkmidi.vs-code-quick-require), but it is written from scratch because the latter one supported only `import` and `require` in JavaScript and could not be customized at all. For example, in some JavaScript convention, you might want to omit the JavaScript file extension (`.js`) and the semi-colon (`;`) at the end of the line, hence it becomes `import MyFile from './MyFile'`.
+This extension is heavily inspired by [**Quick Require**](https://marketplace.visualstudio.com/items?itemName=milkmidi.vs-code-quick-require), but it is written from scratch because it supports only `import` and `require` in JavaScript and could not be customized at all. For example, in some JavaScript convention, you might want to omit the JavaScript file extension (`.js`) and the semi-colon (`;`) at the end of the line, hence it becomes `import MyFile from './MyFile'`.
 
 You can also create a snippet for other languages as well, such as `@import './MyDesign.styl'` in [Stylus](http://stylus-lang.com/docs/import.html).
 
@@ -77,17 +77,17 @@ The extension also checks if the importing JavaScript file has `export default` 
 ]
 ```
 
-## Working with **Node.js**
+## Working with **Node.js** modules
 
 Furthermore, this extension also supports **Node.js** module snippets. The below is the default for `codeQuicken.nodes` setting. Since some node modules contain one or more dashes (`-`), which cannot be used in a JavaScript variable, a helping function `getProperVariableName()` can sanitize it. For example, `react-dom` will become `import reactDom from 'react-dom';`.
 
 ```
-"codeQuicken.nodes": {
+"codeQuicken.nodes": [
   {
     "name": "*",
     "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n"
   }
-}
+]
 ```
 
 ## File settings
@@ -206,6 +206,35 @@ You may use one or more following pre-defined variables:
 - `insertAt`: a position of code to be inserted to the current active document.  
 This is similar to [File settings](#file-settings).
 
+## Inserting snippets
+
+A text snippet borrows [VS Code snippet syntax](https://code.visualstudio.com/docs/editor/userdefinedsnippets#_snippet-syntax), but it adds an ability to write pure JavaScript code at the placeholder, so you can write `${1:activeFileInfo.fileNameWithoutExtension}` which gives you a tab-stop ability and a powerful string interpolation at the same time.
+
+```
+"codeQuicken.texts": [
+  {
+    "name": string,
+    "when": string,
+    "code": string | string[]
+  },
+  ...
+]
+```
+
+- `name`: a name of this text snippet.
+
+- `when`: a JavaScript boolean expression to control when this pattern is available against the current active document.
+
+- `code`: an ES6 template string to be inserted to the current active document.  
+You may use one or more following pre-defined variables:
+You may use one or more following pre-defined variables:
+  - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
+  - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
+  - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
+  - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
+  - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
+  - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+
 ## JavaScript parser settings
 
 This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a JavaScript parser, so it can detect `import`, `export`, `require` and `module.exports`. You may find the possible values for the plug-in names from [here](https://www.npmjs.com/package/babylon#plugins). The default value is showing below.
@@ -239,8 +268,3 @@ This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a Ja
 - `directoryName`: a string represents only the containing directory to the path.
 
 For example, if you are working with **React**, you need to add `"jsx"` as one of the plug-ins, so this extension is able to work smoothly.
-
-## Release Notes
-
-### 0.0.1
-- Initial release
