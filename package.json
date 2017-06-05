@@ -2,7 +2,7 @@
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
     "description": "Create your file-based context-aware snippets.",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "thisismanta",
     "categories": [
         "Snippets"
@@ -239,9 +239,10 @@
     },
     "scripts": {
         "postinstall": "node ./node_modules/vscode/bin/install",
-        "postversion": "git push --tags --quiet origin master:master && vsce publish",
-        "vscode:prepublish": "tsc --project ./",
-        "compile": "tsc --watch --project ./"
+        "compile": "tsc --watch --project ./",
+        "vscode:prepublish": "tsc --skipLibCheck --project ./",
+        "version": "vsce publish",
+        "postversion": "git push --tags --quiet origin master:master"
     },
     "devDependencies": {
         "@types/babylon": "^6.7.15",
