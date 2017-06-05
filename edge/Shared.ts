@@ -142,7 +142,3 @@ export function findInCodeTree(source: object, target: object) {
 		return undefined
 	}
 }
-
-export function getEndOfLine() {
-	return vscode.workspace.getConfiguration('files').get<string>('eol')
-}
