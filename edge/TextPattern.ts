@@ -18,26 +18,34 @@ export default class TextPattern {
 		this.config = config
 
 		// Escape `${0:var}` to `$\{0:${var}\}`
-		const block = (_.isArray(config.code)
-			? config.code.join('\n')
-			: config.code
-		)
+		const block = (_.isArray(config.code) ? config.code.join('\n') : config.code)
 			.split(/\$\{/)
 			.map((chunk, order, array) => {
-				if (order === 0 || /^\d+:/.test(chunk) === false) {
+				if (order === 0) {
 					return chunk
+				} else if (/^\d+:/.test(chunk) === false) {
+					return '${' + chunk
 				}
 
-				let index = chunk.length
-				while (--index && index >= 0) {
-					if (chunk[index] === '}' && index > 0 && chunk[index - 1] !== '\\') {
-						break
+				let closingBraceIndex = -1
+				let bracePairCount = 0
+				while (++closingBraceIndex < chunk.length) {
+					if (closingBraceIndex > 0 && chunk[closingBraceIndex - 1] !== '\\') {
+						if (chunk[closingBraceIndex] === '{') {
+							bracePairCount += 1
+						} else if (chunk[closingBraceIndex] === '}') {
+							if (bracePairCount === 0) {
+								break
+							} else {
+								bracePairCount -= 1
+							}
+						}
 					}
 				}
 
-				if (index >= 0) {
+				if (closingBraceIndex >= 0 && closingBraceIndex < chunk.length) {
 					const colon = chunk.indexOf(':')
-					return '$\\{' + chunk.substring(0, colon) + ':${' + chunk.substring(colon + 1, index).trim() + '}\\}' + chunk.substring(index + 1)
+					return '$\\{' + chunk.substring(0, colon) + ':${' + chunk.substring(colon + 1, closingBraceIndex).trim() + '}\\}' + chunk.substring(closingBraceIndex + 1)
 				} else {
 					return chunk
 				}
@@ -53,13 +61,14 @@ export default class TextPattern {
 	check(document: vscode.TextDocument): boolean {
 		if (this.config.when) {
 			try {
-				return Boolean(_.template('${' + this.config.when + '}')({
+				const result = (_.template('${' + this.config.when + '}')({
 					_, // Lodash
 					minimatch,
 					path,
 					activeDocument: document,
 					activeFileInfo: new FileInfo(document.fileName),
 				}))
+				return !(result === 'false' || result === '' || parseFloat(result) === 0)
 			} catch (ex) {
 				console.error(ex)
 				return false
