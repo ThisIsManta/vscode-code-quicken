@@ -13,7 +13,8 @@ import FileItem from './FileItem'
 import NodeItem from './NodeItem'
 import TextItem from './TextItem'
 
-const fileCache = new Map<string, FileItem>()
+let fileCache = new Array<FileItem>()
+let fileWatch: vscode.FileSystemWatcher
 const nodeCache = new Map<string, NodeItem>()
 
 export function activate(context: vscode.ExtensionContext) {
@@ -32,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeConfiguration(() => {
         loadLocalConfiguration()
 
-        fileCache.clear()
+        fileCache = []
         nodeCache.clear()
     })
 
@@ -43,6 +44,14 @@ export function activate(context: vscode.ExtensionContext) {
         textPatterns = config.get<Array<TextConfiguration>>('texts', []).map(stub => new TextPattern(stub))
         jsParserPlugins = config.get<Array<string>>('javascript.parser.plugins')
     }
+
+    fileWatch = vscode.workspace.createFileSystemWatcher('**/*', false, true, false)
+    fileWatch.onDidCreate(e => {
+        fileCache = []
+    })
+    fileWatch.onDidDelete(e => {
+        _.remove(fileCache, fileItem => fileItem.fileInfo.localPath === e.fsPath)
+    })
 
     function createCommand({ includeFiles, includeNodes, includeTexts }) {
         return async function () {
@@ -57,31 +66,25 @@ export function activate(context: vscode.ExtensionContext) {
             let items: Array<vscode.QuickPickItem> = []
 
             // Add files which will be shown in VS Code picker
-            const applicableFilePatterns = filePatterns.filter(pattern => pattern.check(currentDocument))
-            for (let index = 0; index < applicableFilePatterns.length; index++) {
-                const fileLinks = await applicableFilePatterns[index].getFileLinks()
-                fileLinks.map(fileLink => {
-                    if (fileCache.has(fileLink.fsPath) === false) {
-                        fileCache.set(fileLink.fsPath, new FileItem(fileLink))
-                    }
-                    return fileCache.get(fileLink.fsPath)
-                }).forEach(item => {
-                    item.updateSortablePath(currentFileInfo.directoryPath)
-
-                    if (item.fileInfo.localPath !== currentFileInfo.localPath) {
-                        items.push(item)
-                    }
-                })
+            if (fileCache.length > 0) {
+                items = fileCache
+            } else {
+                const filePatternsForCurrentDocument = filePatterns.filter(pattern => pattern.check(currentDocument))
+                for (let index = 0; index < filePatternsForCurrentDocument.length; index++) {
+                    const fileLinks = await filePatternsForCurrentDocument[index].getFileLinks()
+                    items = fileLinks.map(fileLink => new FileItem(fileLink))
+                }
             }
 
-            // Remove duplicate files and sort files
-            if (items.length > 0) {
-                items = _.uniq(items)
-                items = _.sortBy(items, [
+            items = _.chain(items)
+                .reject((item: FileItem) => item.fileInfo.localPath === currentFileInfo.localPath) // Remove the current file
+                .uniq() // Remove duplicate files
+                .forEach((item: FileItem) => item.updateSortablePath(currentFileInfo.directoryPath))
+                .sortBy([ // Sort files by their path and name
                     (item: FileItem) => item.sortablePath,
                     (item: FileItem) => item.sortableName,
                 ])
-            }
+                .value()
 
             // Add node modules which will be shown in VS Code picker
             if (/^(java|type)script\w*/.test(currentDocument.languageId) && fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
@@ -323,6 +326,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    fileCache.clear()
+    fileCache = []
+    fileWatch.dispose()
     nodeCache.clear()
 }
