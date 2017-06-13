@@ -1,8 +1,8 @@
 {
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
-    "description": "Create your file-based context-aware snippets.",
-    "version": "0.0.3",
+    "description": "Create your powerful context-aware snippets.",
+    "version": "0.0.4",
     "publisher": "thisismanta",
     "categories": [
         "Snippets"
@@ -20,7 +20,7 @@
     "bugs": {
         "url": "https://github.com/ThisIsManta/vscode-code-quicken/issues"
     },
-    "icon": "misc/logo.svg",
+    "icon": "docs/logo.svg",
     "galleryBanner": {
         "color": "#ffea00",
         "theme": "light"
@@ -40,23 +40,23 @@
         "commands": [
             {
                 "command": "codeQuicken.showAll",
-                "title": "Insert a file-based or node-module context-aware snippet"
+                "title": "Code Quicken: Insert a snippet"
             },
             {
                 "command": "codeQuicken.showFiles",
-                "title": "Insert a file-based context-aware snippet"
+                "title": "Code Quicken: Insert a file-based snippet"
             },
             {
                 "command": "codeQuicken.showNodes",
-                "title": "Insert a Node-module context-aware snippet"
+                "title": "Code Quicken: Insert a Node-module snippet"
             },
             {
                 "command": "codeQuicken.showTexts",
-                "title": "Insert a context-aware snippet"
+                "title": "Code Quicken: Insert a context-aware snippet"
             },
             {
                 "command": "codeQuicken.fixImports",
-                "title": "Fix invalid-path import statements"
+                "title": "Code Quicken: Fix broken import statements"
             }
         ],
         "configuration": {

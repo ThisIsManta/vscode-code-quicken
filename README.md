@@ -6,11 +6,19 @@ This extension is heavily inspired by [**Quick Require**](https://marketplace.vi
 
 You can also create a snippet for other languages as well, such as `@import './MyDesign.styl'` in [Stylus](http://stylus-lang.com/docs/import.html).
 
+## Available commands
+
+- Insert a snippet (Default keybinding: *Ctrl+Shift+I*)
+- Insert a file-based snippet
+- Insert a Node-module snippet
+- Insert a context-aware snippet
+- Fix broken import statements
+
 ## Basic usage
 
 Simply press _Ctrl+Shift+I_ on your keyboard to list all macthing files, and choose one file that you would like to insert a snippet based on it.
 
-\!\[feature X\]\(images/feature-x.png\)
+![feature X](docs/.gif)
 
 Given the below settings, when pressing _Ctrl+Shift+I_, it will list all JavaScript files and insert a snippet `import MyFile from './MyFile.js';` before your first import statement. As you can see, `path` is a glob pattern matching all JavaScript files recusively, `code` is an ES6 template string (actually, it will be passed onto [lodash's template function](https://lodash.com/docs/4.17.4#template)), and `insertAt` represents the position of the code to be inserted.
 
@@ -49,12 +57,12 @@ Supposed you want to import one file to two different kind of files, such as imp
 "codeQuicken.files": [
   {
     "path": "**/*.css",
-    "when": "activeFileInfo.fileExtensionWithoutLeadingDot === 'js'",
+    "when": "activeDocument.languageId === 'javascript'",
     "code": "import ${selectFilePath};\n"
   },
   {
     "path": "**/*.css",
-    "when": "activeFileInfo.fileExtensionWithoutLeadingDot === 'css'",
+    "when": "activeDocument.languageId === 'css'",
     "code": "@import '${selectFilePath}';\n"
   }
 ]
