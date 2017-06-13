@@ -202,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
                 })
 
                 if (pattern.checkForImportOrRequire) {
-                    if (existingImports.find(stub => stub.value === selectRelativeFilePath)) {
+                    if (existingImports.find(stub => stub.path === selectRelativeFilePath)) {
                         vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
                         return null
                     } else {
