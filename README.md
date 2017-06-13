@@ -18,7 +18,7 @@ You can also create a snippet for other languages as well, such as `@import './M
 
 Simply press _Ctrl+Shift+I_ on your keyboard to list all macthing files, and choose one file that you would like to insert a snippet based on it.
 
-![feature X](docs/.gif)
+![Import a file in JavaScript ES6](docs/import-file.gif)
 
 Given the below settings, when pressing _Ctrl+Shift+I_, it will list all JavaScript files and insert a snippet `import MyFile from './MyFile.js';` before your first import statement. As you can see, `path` is a glob pattern matching all JavaScript files recusively, `code` is an ES6 template string (actually, it will be passed onto [lodash's template function](https://lodash.com/docs/4.17.4#template)), and `insertAt` represents the position of the code to be inserted.
 
@@ -72,7 +72,7 @@ Supposed you want to import one file to two different kind of files, such as imp
 
 When importing JavaScript files, the extension will genuinely check if the chosen file has been imported already. This prevents duplicate import statements.
 
-// Insert GIF here
+![Import an existing file in JavaScript ES6](docs/import-file-duplicate.gif)
 
 The extension also checks if the importing JavaScript file has `export default` or `module.exports`, so that you can use a variable `selectFileHasDefaultExport` in `code` setting.
 
@@ -177,6 +177,8 @@ The possible values are: `"beforeFirstImport"`, `"afterLastImport"`, `"top"`, `"
 The default value is `cursor`.
 
 ## Node module settings
+
+![Import a Node.js module](docs/import-node.gif)
 
 ```
 "codeQuicken.nodes": [

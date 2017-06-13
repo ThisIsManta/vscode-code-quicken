@@ -127,6 +127,11 @@
                             "insertAt": "beforeFirstImport"
                         },
                         {
+                            "path": "**/*.css",
+                            "when": "activeDocument.languageId === 'css'",
+                            "code": "@import '${selectFilePath}'\n"
+                        },
+                        {
                             "path": "**/*.styl",
                             "when": "activeDocument.languageId === 'stylus'",
                             "code": "@import '${selectFilePath}'\n"
