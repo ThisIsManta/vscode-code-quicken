@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const filePatternsForCurrentDocument = filePatterns.filter(pattern => pattern.check(currentDocument))
                 for (let index = 0; index < filePatternsForCurrentDocument.length; index++) {
                     const fileLinks = await filePatternsForCurrentDocument[index].getFileLinks()
-                    items = fileLinks.map(fileLink => new FileItem(fileLink))
+                    items = items.concat(fileLinks.map(fileLink => new FileItem(fileLink)))
                 }
             }
 
