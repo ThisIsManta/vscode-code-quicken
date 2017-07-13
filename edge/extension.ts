@@ -283,9 +283,9 @@ export function activate(context: vscode.ExtensionContext) {
                 const node = invalidImportList[index]
                 const fileName = _.last(node.source.value.split(/\\|\//))
 
-                let modifiedImportList = _.flatten([
-                    await vscode.workspace.findFiles('**/' + fileName, null, 10),
-                    await vscode.workspace.findFiles('**/' + fileName + '.js', null, 10),
+                let matchingImportList = _.flatten([
+                    await vscode.workspace.findFiles('**/' + fileName),
+                    await vscode.workspace.findFiles('**/' + fileName + '.js'),
                 ]).map(uri => {
                     const fileInfo = new FileInfo(uri.fsPath)
                     const filePath = fileInfo.getRelativePath(currentFileInfo.directoryPath)
@@ -296,16 +296,19 @@ export function activate(context: vscode.ExtensionContext) {
                         return filePath.substring(0, filePath.length - fileExtn.length)
                     }
                 })
-                if (modifiedImportList.length === 1) {
-                    node.source.newValue = modifiedImportList[0]
+                if (matchingImportList.length === 1) {
+                    node.source.newValue = matchingImportList[0]
                 } else {
-                    const originalDirectoryName = _.last(node.source.value.split(/\\|\//).slice(-2, -1))
-                    modifiedImportList = modifiedImportList.filter(filePath => {
-                        const modifiedDirectoryName = _.last(filePath.split(/\\|\//).slice(-2, -1))
-                        return originalDirectoryName === modifiedDirectoryName
-                    })
-                    if (modifiedImportList.length === 1) {
-                        node.source.newValue = modifiedImportList[0]
+                    const originalPathList = node.source.value.split(/\\|\//).slice(0, -1).filter(pathUnit => pathUnit !== '.' && pathUnit !== '..')
+                    let count = 0
+                    while (++count <= originalPathList.length) {
+                        matchingImportList = matchingImportList.filter(filePath => {
+                            return filePath.split(/\\|\//).slice(0, -1).slice(-count).join('|') === originalPathList.slice(-count).join('|')
+                        })
+                        if (matchingImportList.length === 1) {
+                            node.source.newValue = matchingImportList[0]
+                            break
+                        }
                     }
                 }
             }
