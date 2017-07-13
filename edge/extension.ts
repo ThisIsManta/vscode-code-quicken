@@ -68,12 +68,15 @@ export function activate(context: vscode.ExtensionContext) {
             // Add files which will be shown in VS Code picker
             if (fileCache.length > 0) {
                 items = fileCache
+
             } else {
                 const filePatternsForCurrentDocument = filePatterns.filter(pattern => pattern.check(currentDocument))
                 for (let index = 0; index < filePatternsForCurrentDocument.length; index++) {
                     const fileLinks = await filePatternsForCurrentDocument[index].getFileLinks()
                     items = items.concat(fileLinks.map(fileLink => new FileItem(fileLink)))
                 }
+
+                fileCache = items as FileItem[]
             }
 
             items = _.chain(items)
@@ -292,8 +295,8 @@ export function activate(context: vscode.ExtensionContext) {
                     await vscode.workspace.findFiles('**/' + originalFileName),
                     await vscode.workspace.findFiles('**/' + originalFileName + '.js'),
                     await vscode.workspace.findFiles('**/' + originalFileName + '/index.js'),
-                ]).map(uri => {
-                    const fileInfo = new FileInfo(uri.fsPath)
+                ]).map(fileLink => {
+                    const fileInfo = new FileInfo(fileLink.fsPath)
                     const filePath = fileInfo.getRelativePath(currentFileInfo.directoryPath)
                     const fileName = path.basename(filePath)
                     const fileExtn = path.extname(filePath)
