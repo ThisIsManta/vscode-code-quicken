@@ -281,16 +281,21 @@ export function activate(context: vscode.ExtensionContext) {
 
             for (let index = 0; index < invalidImportList.length; index++) {
                 const node = invalidImportList[index]
-                const fileName = _.last(node.source.value.split(/\\|\//))
+                const originalFileName = _.last(node.source.value.split(/\\|\//))
 
                 let matchingImportList = _.flatten([
-                    await vscode.workspace.findFiles('**/' + fileName),
-                    await vscode.workspace.findFiles('**/' + fileName + '.js'),
+                    await vscode.workspace.findFiles('**/' + originalFileName),
+                    await vscode.workspace.findFiles('**/' + originalFileName + '.js'),
+                    await vscode.workspace.findFiles('**/' + originalFileName + '/index.js'),
                 ]).map(uri => {
                     const fileInfo = new FileInfo(uri.fsPath)
                     const filePath = fileInfo.getRelativePath(currentFileInfo.directoryPath)
+                    const fileName = path.basename(filePath)
                     const fileExtn = path.extname(filePath)
-                    if (node.source.value.endsWith(fileExtn)) {
+                    const dirxName = path.dirname(filePath).split(/\\|\//).slice(-1)[0]
+                    if (fileName === 'index.js' && node.source.value.endsWith(dirxName)) {
+                        return filePath.substring(0, filePath.length - fileName.length - 1)
+                    } else if (node.source.value.endsWith(fileExtn)) {
                         return filePath
                     } else {
                         return filePath.substring(0, filePath.length - fileExtn.length)
