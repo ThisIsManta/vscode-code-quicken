@@ -2,7 +2,7 @@
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
     "description": "Create your powerful context-aware snippets.",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "publisher": "thisismanta",
     "categories": [
         "Snippets"
