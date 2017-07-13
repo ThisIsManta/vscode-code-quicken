@@ -270,10 +270,15 @@ export function activate(context: vscode.ExtensionContext) {
         const currentDocument = vscode.window.activeTextEditor.document
         const currentFileInfo = new FileInfo(currentDocument.fileName)
 
+        if (currentDocument.languageId !== 'javascript') {
+            vscode.window.showErrorMessage('The current file is not JavaScript.')
+            return null
+        }
+
         await vscode.window.withProgress({ title: 'Fixing invalid import statements', location: vscode.ProgressLocation.Window }, async () => {
             const codeTree = Shared.getCodeTree(currentDocument.getText(), currentDocument.languageId, jsParserPlugins)
             const invalidImportList = codeTree.program.body
-                .filter(node => node.type === 'ImportDeclaration' && node.source.value.startsWith('.'))
+                .filter(node => node.type === 'ImportDeclaration' && node.source.value.startsWith('.') && !node.source.value.includes('?') && !node.source.value.includes('!') && !node.source.value.includes('"'))
                 .filter(node =>
                     fs.existsSync(path.join(currentFileInfo.directoryPath, node.source.value)) === false &&
                     fs.existsSync(path.join(currentFileInfo.directoryPath, node.source.value + '.js')) === false
