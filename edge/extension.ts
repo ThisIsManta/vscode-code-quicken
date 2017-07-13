@@ -124,7 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // Show VS Code picker and await user for the selection
-            const select = await vscode.window.showQuickPick(items, { placeHolder: 'Type a file path or node module name' })
+            const select = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' })
 
             // Stop processing if there is no selection
             if (!select) {
