@@ -250,17 +250,17 @@
         "postversion": "git push --tags --quiet origin master:master"
     },
     "devDependencies": {
-        "@types/babylon": "^6.7.15",
-        "@types/lodash": "^4.14.54",
+        "@types/babylon": "^6.16.2",
+        "@types/lodash": "^4.14.73",
         "@types/minimatch": "^2.0.29",
-        "@types/node": "^6.0.40",
-        "typescript": "^2.0.3",
-        "vscode": "^1.1.0"
+        "@types/node": "^6.0.86",
+        "typescript": "^2.4.2",
+        "vscode": "^1.1.4"
     },
     "dependencies": {
-        "babylon": "^6.16.1",
-        "glob": "^7.1.1",
+        "babylon": "^6.18.0",
+        "glob": "^7.1.2",
         "lodash": "^4.17.4",
-        "minimatch": "^3.0.3"
+        "minimatch": "^3.0.4"
     }
 }
