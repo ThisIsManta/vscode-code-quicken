@@ -50,7 +50,7 @@ export default class FilePattern {
 	}
 
 	match(fileInfo: FileInfo): boolean {
-		let pathThatIsRelativeToRootPath = fileInfo.localPath
+		let pathThatIsRelativeToRootPath = fileInfo.fullPath
 		if (pathThatIsRelativeToRootPath.startsWith(vscode.workspace.rootPath)) {
 			pathThatIsRelativeToRootPath = _.trimStart(pathThatIsRelativeToRootPath.substring(vscode.workspace.rootPath.length).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/'), '/')
 		}

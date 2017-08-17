@@ -1,10 +1,13 @@
 import * as _ from 'lodash'
 import * as babylon from 'babylon'
 import * as vscode from 'vscode'
+import * as path from 'path'
+import * as glob from 'glob'
+import FileInfo from './FileInfo'
 
 export const PATH_SEPARATOR_FOR_WINDOWS = /\\/g
 
-export const DRIVE_LETTER_FOR_WINDOWS = /^(\w+):\\/
+export const DRIVE_LETTER_FOR_WINDOWS = /^(\w+):(\\|\/)/
 
 export const CURRENT_DIRECTORY_SEMANTIC = /^\.\//
 
@@ -72,36 +75,51 @@ export function getProperVariableName(fileName: string) {
 	return parts.join('')
 }
 
-export function createTemplate(code: string | Array<string>, postProcessor?: (string) => string) {
-	if (_.isArray(code)) {
-		code = code.join('\n')
-	} else {
-		code = code.replace(/\r\n/g, '\n')
-	}
-	let template
-
-	try {
-		template = _.template(code)
-	} catch (ex) {
-		throw new Error('Error parsing: ' + code + '\n' + ex.message)
-	}
-
-	return (context: { activeDocument: vscode.TextDocument }) => {
-		const targetIndent = (vscode.window.activeTextEditor.options.insertSpaces as boolean) ? (' '.repeat(vscode.window.activeTextEditor.options.tabSize as number)) : '\t'
-		let text = template(context)
-			.split('\n')
-			.map(line => line.startsWith('\t')
-				? line.replace(/^\t/g, originalIndent => targetIndent.repeat(originalIndent.length))
-				: line
-			)
-			.join(context.activeDocument.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
-
-		if (postProcessor) {
-			text = postProcessor(text)
+export function createTemplate(code: string | Array<string> | { fromFile: string }, foreProcessor?: (string) => string, postProcessor?: (string) => string) {
+	if (typeof code === 'object') {
+		const codePath = _.get(code, 'fromFile')
+		return (context: { activeDocument: vscode.TextDocument }) => {
+			const codeFunc = require(path.resolve(vscode.workspace.rootPath, codePath))
+			return normalize(codeFunc(context), context.activeDocument)
 		}
 
-		return text
+	} else {
+		if (_.isArray(code)) {
+			code = code.join('\n')
+		} else {
+			code = code.replace(/\r\n/g, '\n')
+		}
+
+		if (typeof foreProcessor === 'function') {
+			code = foreProcessor(code)
+		}
+
+		let template
+		try {
+			template = _.template(code)
+		} catch (ex) {
+			throw new Error('Error parsing: ' + code + '\n' + ex.message)
+		}
+
+		return (context: { activeDocument: vscode.TextDocument }) => {
+			let text = normalize(template(context), context.activeDocument)
+			if (typeof postProcessor === 'function') {
+				text = postProcessor(text)
+			}
+			return text
+		}
 	}
+}
+
+function normalize(text: string, activeDocument: vscode.TextDocument) {
+	const targetIndent = (vscode.window.activeTextEditor.options.insertSpaces as boolean) ? (' '.repeat(vscode.window.activeTextEditor.options.tabSize as number)) : '\t'
+	return text
+		.split(/\r?\n/)
+		.map(line => line.startsWith('\t')
+			? line.replace(/^\t/g, originalIndent => targetIndent.repeat(originalIndent.length))
+			: line
+		)
+		.join(activeDocument.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
 }
 
 export function getCodeTree(text: string, fileExtensionOrLanguageId: string, plugins = []): any {
@@ -138,7 +156,25 @@ export function findInCodeTree(source: object, target: object) {
 	} else if (_.isObject(source['body'])) {
 		return findInCodeTree(source['body'], target)
 
+	} else if (_.get(source, 'type', '').endsWith('Declaration') && _.has(source, 'declaration')) {
+		return findInCodeTree(source['declaration'], target)
+
+	} else if (_.get(source, 'type', '').endsWith('Declaration') && _.has(source, 'declarations') && _.isArray(source['declarations'])) {
+		for (let index = 0; index < source['declarations'].length; index++) {
+			const result = findInCodeTree(source['declarations'][index], target)
+			if (result !== undefined) {
+				return result
+			}
+		}
+		return undefined
+
 	} else {
 		return undefined
 	}
+}
+
+export function getFilePath(pattern: string) {
+	return glob
+		.sync(pattern, { cwd: path.dirname(vscode.window.activeTextEditor.document.fileName), root: vscode.workspace.rootPath })
+		.map(path => new FileInfo(path))
 }

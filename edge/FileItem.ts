@@ -22,7 +22,7 @@ export default class FileItem implements vscode.QuickPickItem {
 	}
 
 	updateSortablePath(currentDirectoryPath: string) {
-		if (vscode.workspace.textDocuments.find(document => document.fileName === this.fileInfo.localPath) !== undefined) {
+		if (vscode.workspace.textDocuments.find(document => document.fileName === this.fileInfo.fullPath) !== undefined) {
 			this.sortablePath = 'a'
 
 		} else if (this.fileInfo.directoryPath === currentDirectoryPath) {

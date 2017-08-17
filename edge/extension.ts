@@ -50,7 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
         fileCache = []
     })
     fileWatch.onDidDelete(e => {
-        _.remove(fileCache, fileItem => fileItem.fileInfo.localPath === e.fsPath)
+        _.remove(fileCache, fileItem => fileItem.fileInfo.fullPath === e.fsPath)
     })
 
     function createCommand({ includeFiles, includeNodes, includeTexts }) {
@@ -80,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             items = _.chain(items)
-                .reject((item: FileItem) => item.fileInfo.localPath === currentFileInfo.localPath) // Remove the current file
+                .reject((item: FileItem) => item.fileInfo.fullPath === currentFileInfo.fullPath) // Remove the current file
                 .uniq() // Remove duplicate files
                 .forEach((item: FileItem) => item.updateSortablePath(currentFileInfo.directoryPath))
                 .sortBy([ // Sort files by their path and name
@@ -171,6 +171,10 @@ export function activate(context: vscode.ExtensionContext) {
                     _, // Lodash
                     minimatch,
                     path,
+                    fs,
+                    vscode,
+                    FileInfo,
+                    getMatchingCodeNode: (target) => Shared.findInCodeTree(currentCodeTree, target),
                     activeDocument: currentDocument,
                     activeFileInfo: currentFileInfo,
                     moduleName: select.name,
@@ -184,7 +188,7 @@ export function activate(context: vscode.ExtensionContext) {
             } else if (select instanceof FileItem) {
                 const pattern = filePatterns.find(pattern => pattern.match(select.fileInfo) && pattern.check(currentDocument))
 
-                const selectCodeText = fs.readFileSync(select.fileInfo.localPath, 'utf-8')
+                const selectCodeText = fs.readFileSync(select.fileInfo.fullPath, 'utf-8')
                 const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
                 const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
 
@@ -192,6 +196,10 @@ export function activate(context: vscode.ExtensionContext) {
                     _, // Lodash
                     minimatch,
                     path,
+                    fs,
+                    vscode,
+                    FileInfo,
+                    getMatchingCodeNode: (target) => Shared.findInCodeTree(currentCodeTree, target),
                     activeDocument: currentDocument,
                     activeFileInfo: currentFileInfo,
                     selectFileInfo: select.fileInfo,
@@ -231,6 +239,10 @@ export function activate(context: vscode.ExtensionContext) {
                     _, // Lodash
                     minimatch,
                     path,
+                    fs,
+                    vscode,
+                    FileInfo,
+                    getMatchingCodeNode: (target) => Shared.findInCodeTree(currentCodeTree, target),
                     activeDocument: currentDocument,
                     activeFileInfo: currentFileInfo,
                     workspacePath: vscode.workspace.rootPath,

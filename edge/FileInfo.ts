@@ -4,26 +4,33 @@ import * as _ from 'lodash'
 import * as Shared from './Shared'
 
 export default class FileInfo {
-	readonly localPath: string
-	readonly posixPath:string
+	readonly fullPath: string
+	readonly fullPathForPOSIX:string
 	readonly fileNameWithExtension:string
 	readonly fileNameWithoutExtension:string
 	readonly fileExtensionWithoutLeadingDot:string
-	readonly directoryPath:string
 	readonly directoryName:string
+	readonly directoryPath:string
+	readonly directoryPathForPOSIX:string
 
-	constructor(localPath: string) {
-		this.localPath = localPath
-		this.posixPath = this.localPath.replace(Shared.DRIVE_LETTER_FOR_WINDOWS, '/$1/').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
-		this.fileExtensionWithoutLeadingDot = path.extname(this.localPath).replace(/^\./, '')
-		this.fileNameWithExtension = path.basename(this.localPath)
+	constructor(fullPath: string) {
+		// Correct invalid path usually from "glob"
+		if (Shared.DRIVE_LETTER_FOR_WINDOWS.test(fullPath) && fullPath.includes(path.posix.sep)) {
+			fullPath = fullPath.replace(new RegExp('\\' + path.posix.sep, 'g'), path.win32.sep)
+		}
+
+		this.fullPath = fullPath
+		this.fullPathForPOSIX = this.fullPath.replace(Shared.DRIVE_LETTER_FOR_WINDOWS, '/$1/').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
+		this.fileExtensionWithoutLeadingDot = path.extname(this.fullPath).replace(/^\./, '')
+		this.fileNameWithExtension = path.basename(this.fullPath)
 		this.fileNameWithoutExtension = this.fileNameWithExtension.replace(new RegExp('\\.' + this.fileExtensionWithoutLeadingDot + '$', 'i'), '')
-		this.directoryPath = path.dirname(this.localPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
-		this.directoryName = _.last(path.dirname(this.localPath).split(path.sep))
+		this.directoryName = _.last(path.dirname(this.fullPath).split(path.sep))
+		this.directoryPath = path.dirname(this.fullPath)
+		this.directoryPathForPOSIX = path.dirname(this.fullPath).replace(Shared.DRIVE_LETTER_FOR_WINDOWS, '/$1/').replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
 	}
 
 	getRelativePath(directoryPath: string) {
-		let relativePath = path.relative(directoryPath, this.localPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
+		let relativePath = path.relative(directoryPath, this.fullPath).replace(Shared.PATH_SEPARATOR_FOR_WINDOWS, '/')
 		if (relativePath.startsWith('../') === false) {
 			relativePath = './' + relativePath
 		}

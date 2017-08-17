@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
+import * as fs from 'fs'
 import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
@@ -17,8 +18,35 @@ export default class TextPattern {
 	constructor(config: TextConfiguration) {
 		this.config = config
 
+		if (typeof config.code === 'object') {
+			this.interpolate = Shared.createTemplate(config.code)
+		} else {
+			this.interpolate = Shared.createTemplate(this.config.code, this.escapeTabStops, this.unescapeTabStops)
+		}
+	}
+
+	check(document: vscode.TextDocument): boolean {
+		if (this.config.when) {
+			try {
+				const result = (_.template('${' + this.config.when + '}')({
+					_, // Lodash
+					minimatch,
+					path,
+					activeDocument: document,
+					activeFileInfo: new FileInfo(document.fileName),
+				}))
+				return !(result === 'false' || result === '' || parseFloat(result) === 0)
+			} catch (ex) {
+				console.error(ex)
+				return false
+			}
+		}
+		return true
+	}
+
+	private escapeTabStops(codeText: string) {
 		// Escape `${0:var}` to `$\{0:${var}\}`
-		const block = (_.isArray(config.code) ? config.code.join('\n') : config.code)
+		return (codeText)
 			.split(/\$\{/)
 			.map((chunk, order, array) => {
 				if (order === 0) {
@@ -51,29 +79,10 @@ export default class TextPattern {
 				}
 			})
 			.join('')
-
-		this.interpolate = Shared.createTemplate(block, (text: string) => (
-			// Unescape `$\{...\}`
-			text.replace(/\$\\\{/g, '${').replace(/\\\}/g, '}')
-		))
 	}
 
-	check(document: vscode.TextDocument): boolean {
-		if (this.config.when) {
-			try {
-				const result = (_.template('${' + this.config.when + '}')({
-					_, // Lodash
-					minimatch,
-					path,
-					activeDocument: document,
-					activeFileInfo: new FileInfo(document.fileName),
-				}))
-				return !(result === 'false' || result === '' || parseFloat(result) === 0)
-			} catch (ex) {
-				console.error(ex)
-				return false
-			}
-		}
-		return true
+	private unescapeTabStops(codeText: string) {
+		// Unescape `$\{...\}`
+		return codeText.replace(/\$\\\{/g, '${').replace(/\\\}/g, '}')
 	}
 }

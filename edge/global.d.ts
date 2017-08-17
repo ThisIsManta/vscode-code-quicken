@@ -1,6 +1,6 @@
 interface FileConfiguration {
 	path: string | Array<string>
-	code: string | string[]
+	code: string | string[] | { fromFile: string }
 	when?: string
 	checkForImportOrRequire: boolean,
 	interpolate: (object) => string
@@ -10,7 +10,7 @@ interface FileConfiguration {
 
 interface NodeConfiguration {
 	name: string
-	code: string | string[]
+	code: string | string[] | { fromFile: string }
 	when?: string
 	checkForImportOrRequire: boolean,
 	insertAt: string
@@ -18,6 +18,6 @@ interface NodeConfiguration {
 
 interface TextConfiguration {
 	name: string
-	code: string | string[]
+	code: string | string[] | { fromFile: string }
 	when?: string
 }
