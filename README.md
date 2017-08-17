@@ -105,7 +105,7 @@ Furthermore, this extension also supports **Node.js** module snippets. The below
   {
     "path": string | string[],
     "when": string,
-    "code": string | string[],
+    "code": string | string[] | { "fromFile": string },
     "omitExtensionInSelectFilePath": boolean | string,
     "insertAt": string
   },
@@ -152,7 +152,7 @@ You may use one or more following pre-defined variables:
 	]
 	```
 
-- `code`: an ES6 template string to be inserted to the current active document.  
+- `code`: an ES6 template string to be inserted to the current active document. Alternatively, you can pass `{ "fromFile": "./path/to/file.js" }` which contains `module.exports = function ({ activeDocument, ...more }) { return 'snippet' }`  
 You may use one or more following pre-defined variables:
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
   - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
@@ -165,8 +165,9 @@ You may use one or more following pre-defined variables:
   - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
-  - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
-  - `findInCodeTree(codeTree, object)` as a helping function that returns `true` if and only if at least one branch in the given `codeTree` matches the given `object`, otherwise `false`.
+  - `getProperVariableName(text: string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+  - `getMatchingCodeNode(targetNode: object)` as a helping function that returns **Babylon** node if and only if at least one branch matches the given `targetNode`, otherwise `false`.
+  - `getFilePath(pattern: string)` as a helping function that returns an array of [FileInfo](#fileinfo-properties) matches the given glob `pattern`.
 
 - `omitExtensionInSelectFilePath`: a boolean or glob pattern of file extensions to remove from `selectFilePath` variable of `code` setting.  
 Specifying `true` will strip all extension from `selectFilePath` variable of `code` setting.  
@@ -184,7 +185,7 @@ The default value is `cursor`.
 "codeQuicken.nodes": [
   {
     "name": string,
-    "code": string | string[],
+    "code": string | string[] | { "fromFile": string },
     "insertAt": string
   },
   ...
@@ -202,7 +203,7 @@ The default value is `cursor`.
 	]
 	```
 
-- `code`: an ES6 template string to be inserted to the current active document.  
+- `code`: an ES6 template string to be inserted to the current active document. Alternatively, you can pass `{ "fromFile": "./path/to/file.js" }` which contains `module.exports = function ({ activeDocument, ...more }) { return 'snippet' }`  
 You may use one or more following pre-defined variables:
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
   - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
@@ -211,7 +212,9 @@ You may use one or more following pre-defined variables:
   - `_` as [lodash](https://www.npmjs.com/package/lodash).
   - `minimatch` as [minimatch](https://www.npmjs.com/package/minimatch).
   - `path` as [path](https://nodejs.org/api/path.html).
-  - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+  - `getProperVariableName(text: string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+  - `getMatchingCodeNode(targetNode: object)` as a helping function that returns **Babylon** node if and only if at least one branch matches the given `targetNode`, otherwise `false`.
+  - `getFilePath(pattern: string)` as a helping function that returns an array of [FileInfo](#fileinfo-properties) matches the given glob `pattern`.
 
 - `insertAt`: a position of code to be inserted to the current active document.  
 This is similar to [File settings](#file-settings).
@@ -225,7 +228,7 @@ A text snippet borrows [VS Code snippet syntax](https://code.visualstudio.com/do
   {
     "name": string,
     "when": string,
-    "code": string | string[]
+    "code": string | string[] | { "fromFile": string }
   },
   ...
 ]
@@ -235,15 +238,16 @@ A text snippet borrows [VS Code snippet syntax](https://code.visualstudio.com/do
 
 - `when`: a JavaScript boolean expression to control when this pattern is available against the current active document.
 
-- `code`: an ES6 template string to be inserted to the current active document.  
-You may use one or more following pre-defined variables:
+- `code`: an ES6 template string to be inserted to the current active document. Alternatively, you can pass `{ "fromFile": "./path/to/file.js" }` which contains `module.exports = function ({ activeDocument, ...more }) { return 'snippet' }`  
 You may use one or more following pre-defined variables:
   - `activeDocument` as [vscode.window.activeTextEditor.document](https://code.visualstudio.com/docs/extensionAPI/vscode-api#TextDocument).
   - `activeFileInfo` as [FileInfo](#fileinfo-properties) object of the current active document.
   - `_` as **[lodash](https://www.npmjs.com/package/lodash)**.
   - `minimatch` as **[minimatch](https://www.npmjs.com/package/minimatch)**.
   - `path` as **Node.js**' [path](https://nodejs.org/api/path.html).
-  - `getProperVariableName(string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+  - `getProperVariableName(text: string)` as a helping function that sanitizes the input string to a proper JavaScript variable name, such as `react-dom` to `reactDom`.
+  - `getMatchingCodeNode(targetNode: object)` as a helping function that returns **Babylon** node if and only if at least one branch matches the given `targetNode`, otherwise `false`.
+  - `getFilePath(pattern: string)` as a helping function that returns an array of [FileInfo](#fileinfo-properties) matches the given glob `pattern`.
 
 ## JavaScript parser settings
 
@@ -269,12 +273,13 @@ This extension uses **[Babylon](https://www.npmjs.com/package/babylon)** as a Ja
 
 **FileInfo** is an object instance containing path-file-extension information.
 
-- `localPath`: a string represents path in the current operating system. For example, `c:\user\MyFile.js` in Windows, and `/c/user/MyFile.js` in Unix-like. 
-- `unixPath`: a string represents path in Unix-like operating system.
+- `fullPath`: a string represents path in the current operating system. For example, `c:\user\MyFile.js` in Windows, and `/c/user/MyFile.js` in Unix-like. 
+- `fullPathForPOSIX`: a string represents path in Unix-like operating system.
 - `fileNameWithExtension`
 - `fileNameWithoutExtension`
 - `fileExtensionWithoutLeadingDot`
-- `directoryPath`: a string represents series of directories to the path.
 - `directoryName`: a string represents only the containing directory to the path.
+- `directoryPath`: a string represents series of directories to the path in local operating format.
+- `directoryPathForPOSIX`: a string represents series of directories to the path in POSIX format.
 
 For example, if you are working with **React**, you need to add `"jsx"` as one of the plug-ins, so this extension is able to work smoothly.
