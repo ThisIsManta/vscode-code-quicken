@@ -1,6 +1,5 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
-import * as fs from 'fs'
 import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 

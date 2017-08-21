@@ -66,56 +66,62 @@ export function activate(context: vscode.ExtensionContext) {
             let items: Array<vscode.QuickPickItem> = []
 
             // Add files which will be shown in VS Code picker
-            if (fileCache.length > 0) {
-                items = fileCache
+            if (includeFiles) {
+                if (fileCache.length > 0) {
+                    items = fileCache
 
-            } else {
-                const filePatternsForCurrentDocument = filePatterns.filter(pattern => pattern.check(currentDocument))
-                for (let index = 0; index < filePatternsForCurrentDocument.length; index++) {
-                    const fileLinks = await filePatternsForCurrentDocument[index].getFileLinks()
-                    items = items.concat(fileLinks.map(fileLink => new FileItem(fileLink)))
+                } else {
+                    const filePatternsForCurrentDocument = filePatterns.filter(pattern => pattern.check(currentDocument))
+                    for (let index = 0; index < filePatternsForCurrentDocument.length; index++) {
+                        const fileLinks = await filePatternsForCurrentDocument[index].getFileLinks()
+                        items = items.concat(fileLinks.map(fileLink => new FileItem(fileLink)))
+                    }
+
+                    fileCache = items as FileItem[]
                 }
 
-                fileCache = items as FileItem[]
+                items = _.chain(items)
+                    .reject((item: FileItem) => item.fileInfo.fullPath === currentFileInfo.fullPath) // Remove the current file
+                    .uniq() // Remove duplicate files
+                    .forEach((item: FileItem) => item.updateSortablePath(currentFileInfo.directoryPath))
+                    .sortBy([ // Sort files by their path and name
+                        (item: FileItem) => item.sortablePath,
+                        (item: FileItem) => item.sortableName,
+                    ])
+                    .value()
             }
-
-            items = _.chain(items)
-                .reject((item: FileItem) => item.fileInfo.fullPath === currentFileInfo.fullPath) // Remove the current file
-                .uniq() // Remove duplicate files
-                .forEach((item: FileItem) => item.updateSortablePath(currentFileInfo.directoryPath))
-                .sortBy([ // Sort files by their path and name
-                    (item: FileItem) => item.sortablePath,
-                    (item: FileItem) => item.sortableName,
-                ])
-                .value()
 
             // Add node modules which will be shown in VS Code picker
-            if (/^(java|type)script\w*/.test(currentDocument.languageId) && fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
-                const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
+            if (includeNodes) {
+                if (/^(java|type)script\w*/.test(currentDocument.languageId) && fs.existsSync(path.join(vscode.workspace.rootPath, 'package.json'))) {
+                    const packageJson = require(path.join(vscode.workspace.rootPath, 'package.json'))
 
-                items = items.concat(_.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
-                    .flatten<string>()
-                    .map(nodeName => {
-                        if (nodeCache.has(nodeName) === false) {
-                            const pattern = nodePatterns.find(pattern => pattern.match(nodeName))
-                            if (pattern) {
-                                nodeCache.set(nodeName, new NodeItem(nodeName))
-                            } else {
-                                return null
+                    items = items.concat(_.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
+                        .flatten<string>()
+                        .map(nodeName => {
+                            if (nodeCache.has(nodeName) === false) {
+                                const pattern = nodePatterns.find(pattern => pattern.match(nodeName))
+                                if (pattern) {
+                                    nodeCache.set(nodeName, new NodeItem(nodeName))
+                                } else {
+                                    return null
+                                }
                             }
-                        }
-                        return nodeCache.get(nodeName)
-                    })
-                    .compact()
-                    .sortBy((item) => item.name)
-                    .value()
-                )
+                            return nodeCache.get(nodeName)
+                        })
+                        .compact()
+                        .sortBy((item) => item.name)
+                        .value()
+                    )
+                }
             }
 
-            items = items.concat(textPatterns
-                .filter(pattern => pattern.check(currentDocument))
-                .map(pattern => new TextItem(pattern.name))
-            )
+            if (includeTexts) {
+                items = items.concat(textPatterns
+                    .filter(pattern => pattern.check(currentDocument))
+                    .map(pattern => new TextItem(pattern.name))
+                )
+            }
 
             // Stop processing if the current editor is not active
             const editor = vscode.window.activeTextEditor
