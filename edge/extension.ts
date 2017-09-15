@@ -291,8 +291,8 @@ export function activate(context: vscode.ExtensionContext) {
         const currentDocument = vscode.window.activeTextEditor.document
         const currentFileInfo = new FileInfo(currentDocument.fileName)
 
-        if (currentDocument.languageId !== 'javascript') {
-            vscode.window.showErrorMessage('The current file is not JavaScript.')
+        if (_.includes(['javascript', 'javascriptreact', 'typescript', 'typescriptreact'], currentDocument.languageId) === false) {
+            vscode.window.showErrorMessage('Code Quicken: The current language was not supported.')
             return null
         }
 
@@ -322,7 +322,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                     this.description = fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep)
 
-                    if (fileName === 'index.js' && origPath.endsWith(dirxName)) {
+                    if (fileName === ('index.' + currentFileInfo.fileExtensionWithoutLeadingDot) && origPath.endsWith(dirxName)) {
                         this.label = relaPath.substring(0, relaPath.length - fileName.length - 1)
 
                     } else if (origPath.endsWith(fileExtn)) {
@@ -362,17 +362,13 @@ export function activate(context: vscode.ExtensionContext) {
                     .value(),
             ]).filter(item => item.originalPath)
 
-            if (totalImportList.length === 0) {
-                return null
-            }
-
             const invalidImportList = totalImportList.filter(item =>
                 fs.existsSync(fp.join(currentFileInfo.directoryPath, item.originalPath)) === false &&
-                fs.existsSync(fp.join(currentFileInfo.directoryPath, item.originalPath + '.js')) === false
+                fs.existsSync(fp.join(currentFileInfo.directoryPath, item.originalPath + '.' + currentFileInfo.fileExtensionWithoutLeadingDot)) === false
             )
 
             if (invalidImportList.length === 0) {
-                vscode.window.showInformationMessage('Code Quicken: There were no broken import/require statements.')
+                vscode.window.setStatusBarMessage('No broken import/require statements have been found.', 5000)
                 return null
             }
 
@@ -382,7 +378,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 const sourceFileName = _.last(item.originalPath.split(/\\|\//))
-                const matchingImportList = await findFilesRoughly(sourceFileName)
+                const matchingImportList = await findFilesRoughly(sourceFileName, currentFileInfo.fileExtensionWithoutLeadingDot)
 
                 item.matchingPath = matchingImportList.map(fullPath => new WorkingPath(fullPath, item.originalPath))
 
@@ -440,7 +436,10 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             }
 
-            if (unresolvedImportList.length > 0) {
+            if (unresolvedImportList.length === 0) {
+                vscode.window.setStatusBarMessage('All broken import/require statements have been fixed.', 5000)
+
+            } else {
                 vscode.window.showWarningMessage(`Code Quicken: There ${unresolvedImportList.length === 1 ? 'was' : 'were'} ${unresolvedImportList.length} broken import/require statement${unresolvedImportList.length === 1 ? '' : 's'} that had not been fixed.\n` + unresolvedImportList.map(item => item.originalPath).join('\n'))
             }
         })
@@ -449,12 +448,12 @@ export function activate(context: vscode.ExtensionContext) {
     }))
 }
 
-async function findFilesRoughly(fileName: string) {
+async function findFilesRoughly(fileName: string, fileExtn: string) {
     let list = await vscode.workspace.findFiles('**/' + fileName)
 
-    if (fileName.endsWith('.js') === false) {
-        list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '.js'))
-        list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.js'))
+    if (fileName.endsWith('.' + fileExtn) === false) {
+        list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '.' + fileExtn))
+        list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.' + fileExtn))
     }
 
     return list.map(item => item.fsPath)
