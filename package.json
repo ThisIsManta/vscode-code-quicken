@@ -56,7 +56,7 @@
             },
             {
                 "command": "codeQuicken.fixImports",
-                "title": "Code Quicken: Fix broken import statements"
+                "title": "Code Quicken: Fix broken import/require statements"
             }
         ],
         "configuration": {

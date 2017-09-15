@@ -12,7 +12,7 @@ You can also create a snippet for other languages as well, such as `@import './M
 - Insert a file-based snippet
 - Insert a Node-module snippet
 - Insert a context-aware snippet
-- Fix broken import statements
+- Fix broken import/require statements
 
 ## Basic usage
 
