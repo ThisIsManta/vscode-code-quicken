@@ -357,7 +357,7 @@ export function activate(context: vscode.ExtensionContext) {
                     .map(node => new WorkingItem(node.source.value, node.source.loc))
                     .value(),
                 _.chain(findRequireRecursively(codeTree.program.body))
-                    .filter(node => node.arguments[0].value.length > 0)
+                    .filter(node => node.arguments[0].value.startsWith('.'))
                     .map(node => new WorkingItem(node.arguments[0].value, node.arguments[0].loc))
                     .value(),
             ]).filter(item => item.originalPath)

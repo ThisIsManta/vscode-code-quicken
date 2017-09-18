@@ -1,3 +1,6 @@
+### 0.0.10
+- Fixed the unexpected reading Node-module require statements.
+
 ### 0.0.9
 - Added ability to fix broken require statements.
 - Added ability to manually fix the import/require statements when more than one path is matched.
