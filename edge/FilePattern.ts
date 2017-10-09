@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import * as path from 'path'
+import * as fp from 'path'
 import * as _ from 'lodash'
 import { match as minimatch } from 'minimatch'
 
@@ -36,7 +36,7 @@ export default class FilePattern {
 				const result = _.template('${' + this.config.when + '}')({
 					_, // Lodash
 					minimatch,
-					path,
+					path: fp,
 					activeDocument: document,
 					activeFileInfo: new FileInfo(document.fileName),
 				}) as string

@@ -53,7 +53,7 @@ export function activate(context: vscode.ExtensionContext) {
         _.remove(fileCache, fileItem => fileItem.fileInfo.fullPath === e.fsPath)
     })
 
-    function createCommand({ includeFiles, includeNodes, includeTexts }) {
+    function createCommand({ includeFiles, includeNodes, includeTexts }: { includeFiles: boolean, includeNodes: boolean, includeTexts: boolean }) {
         return async function () {
             // Stop processing if the VS Code is not working with folder, or the current document is untitled
             if (vscode.workspace.rootPath === undefined || vscode.window.activeTextEditor === undefined || vscode.window.activeTextEditor.document.isUntitled) {
@@ -176,7 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
-                    fp,
+                    path: fp,
                     fs,
                     vscode,
                     FileInfo,
@@ -197,11 +197,33 @@ export function activate(context: vscode.ExtensionContext) {
                 const selectCodeText = fs.readFileSync(select.fileInfo.fullPath, 'utf-8')
                 const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
                 const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
+                const selectFileHasDefaultExport = selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined
+
+                let selectVariableNameFromIndexFile = ''
+                let selectVariableNameFromCurrentFile = ''
+                let exportedVariables: Array<string> = []
+                if (select.hasIndexFile() && (exportedVariables = select.getExportedVariablesFromIndexFile(jsParserPlugins)).length > 0) {
+                    if (exportedVariables.length === 1) {
+                        selectVariableNameFromIndexFile = exportedVariables[0]
+
+                    } else if (exportedVariables.length > 1) {
+                        selectVariableNameFromIndexFile = await vscode.window.showQuickPick(exportedVariables)
+                    }
+
+                } else if (selectFileHasDefaultExport === false) {
+                    exportedVariables = select.getExportedVariablesFromCurrentFile(jsParserPlugins)
+                    if (exportedVariables.length === 1) {
+                        selectVariableNameFromCurrentFile = exportedVariables[0]
+
+                    } else if (exportedVariables.length > 1) {
+                        selectVariableNameFromCurrentFile = await vscode.window.showQuickPick(exportedVariables)
+                    }
+                }
 
                 const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
-                    fp,
+                    path: fp,
                     fs,
                     vscode,
                     FileInfo,
@@ -212,9 +234,12 @@ export function activate(context: vscode.ExtensionContext) {
                     selectFilePath: selectRelativeFilePath,
                     selectCodeText: selectCodeText,
                     selectCodeTree: selectCodeTree,
-                    selectFileHasDefaultExport: selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined,
+                    selectFileHasDefaultExport: selectFileHasDefaultExport,
+                    selectVariableNameFromCurrentFile: selectVariableNameFromCurrentFile,
+                    selectVariableNameFromIndexFile: selectVariableNameFromIndexFile,
                     workspacePath: vscode.workspace.rootPath,
                     isIndexFile: select.fileInfo.fileNameWithoutExtension === 'index' && select.fileInfo.directoryPath !== currentFileInfo.directoryPath,
+                    exportedByIndexFile: select.getExportedVariablesFromIndexFile(jsParserPlugins),
                     ...Shared,
                 })
 
@@ -244,7 +269,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const snippet = pattern.interpolate({
                     _, // Lodash
                     minimatch,
-                    fp,
+                    path: fp,
                     fs,
                     vscode,
                     FileInfo,

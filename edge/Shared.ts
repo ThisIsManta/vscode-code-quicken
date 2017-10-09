@@ -1,7 +1,7 @@
 import * as _ from 'lodash'
 import * as babylon from 'babylon'
 import * as vscode from 'vscode'
-import * as path from 'path'
+import * as fp from 'path'
 import * as glob from 'glob'
 import FileInfo from './FileInfo'
 
@@ -79,7 +79,7 @@ export function createTemplate(code: string | Array<string> | { fromFile: string
 	if (typeof code === 'object') {
 		const codePath = _.get(code, 'fromFile')
 		return (context: { activeDocument: vscode.TextDocument }) => {
-			const codeFunc = require(path.resolve(vscode.workspace.rootPath, codePath))
+			const codeFunc = require(fp.resolve(vscode.workspace.rootPath, codePath))
 			return normalize(codeFunc(context), context.activeDocument)
 		}
 
@@ -175,6 +175,6 @@ export function findInCodeTree(source: object, target: object) {
 
 export function getFilePath(pattern: string) {
 	return glob
-		.sync(pattern, { cwd: path.dirname(vscode.window.activeTextEditor.document.fileName), root: vscode.workspace.rootPath })
+		.sync(pattern, { cwd: fp.dirname(vscode.window.activeTextEditor.document.fileName), root: vscode.workspace.rootPath })
 		.map(path => new FileInfo(path))
 }
