@@ -21,6 +21,8 @@ export default class FileItem implements vscode.QuickPickItem {
 		this.description = _.trim(fp.dirname(fileLink.fsPath.substring(vscode.workspace.rootPath.length)), fp.sep)
 
 		this.sortableName = this.fileInfo.fileNameWithoutExtension === 'index' ? '!' : this.fileInfo.fileNameWithExtension.toLowerCase()
+
+		resolveFileExtn.cache.clear()
 	}
 
 	updateSortablePath(currentDirectoryPath: string) {
@@ -71,7 +73,10 @@ export default class FileItem implements vscode.QuickPickItem {
 						}
 
 					} else if (node.type === 'ExportAllDeclaration' && node.source.value) {
-						return this.getExportedVariables(fp.resolve(filePath, node.source.value), plugins)
+						return this.getExportedVariables(resolveFileExtn(this.fileInfo.fileExtensionWithoutLeadingDot, filePath, node.source.value), plugins)
+
+					} else if (_.isMatch(node, Shared.MODULE_EXPORTS) && node.expression.right.type === 'ObjectExpression') {
+						return node.expression.right.properties.map(item => item.key.name)
 					}
 				})
 				.flatten()
@@ -103,33 +108,45 @@ export default class FileItem implements vscode.QuickPickItem {
 					return hash
 				}, {})
 
-			const exportStatements = codeTree.program.body.filter(node => node.type === 'ExportNamedDeclaration')
 			const exportedVariableList = new Array<string>()
 			const exportedVariableSourceDict = new Map<string, string>()
 			const sourceExportedVariableDict = new Map<string, Array<string>>()
-			exportStatements.forEach(node => {
-				node.specifiers.forEach(item => {
-					if (item => item.type === 'ExportSpecifier' && item.local && item.local.type === 'Identifier') {
-						const name = item.local.name
-						let path
-						if (node.source) {
-							path = fp.resolve(this.fileInfo.directoryPath, node.source.value)
-						} else {
-							path = importedVariableSourceDict[name]
-						}
 
-						if (path) {
-							exportedVariableList.push(name)
-							exportedVariableSourceDict.set(name, path)
-							if (sourceExportedVariableDict.has(path)) {
-								sourceExportedVariableDict.get(path).push(name)
+			function save(name: string, path: string) {
+				if (!name || !path) return false
+
+				exportedVariableList.push(name)
+				exportedVariableSourceDict.set(name, path)
+				if (sourceExportedVariableDict.has(path)) {
+					sourceExportedVariableDict.get(path).push(name)
+				} else {
+					sourceExportedVariableDict.set(path, [name])
+				}
+			}
+
+			codeTree.program.body.filter(node => node.type === 'ExportNamedDeclaration')
+				.forEach(node => {
+					node.specifiers.forEach(item => {
+						if (item => item.type === 'ExportSpecifier' && item.local && item.local.type === 'Identifier') {
+							const name = item.local.name
+							let path
+							if (node.source) {
+								path = resolveFileExtn(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, node.source.value)
 							} else {
-								sourceExportedVariableDict.set(path, [name])
+								path = resolveFileExtn(this.fileInfo.fileExtensionWithoutLeadingDot, importedVariableSourceDict[name])
 							}
+							save(name, path)
 						}
-					}
+					})
 				})
-			})
+
+			codeTree.program.body.filter(node => node.type === 'ExportAllDeclaration')
+				.forEach(node => {
+					const path = resolveFileExtn(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, node.source.value)
+					this.getExportedVariables(path, plugins).forEach(name => {
+						save(name, path)
+					})
+				})
 
 			if (this.fileInfo.fileNameWithoutExtension === 'index') {
 				return exportedVariableList
@@ -139,11 +156,6 @@ export default class FileItem implements vscode.QuickPickItem {
 				return sourceExportedVariableDict.get(this.fileInfo.fullPath)
 			}
 
-			const pathWithoutExtn = this.fileInfo.fullPath.replace(new RegExp('\\.' + this.fileInfo.fileExtensionWithoutLeadingDot + '$'), '')
-			if (sourceExportedVariableDict.has(pathWithoutExtn)) {
-				return sourceExportedVariableDict.get(pathWithoutExtn)
-			}
-
 		} catch (ex) {
 			console.error(ex)
 		}
@@ -151,3 +163,13 @@ export default class FileItem implements vscode.QuickPickItem {
 		return []
 	}
 }
+
+const resolveFileExtn = _.memoize((extn: string, ...path: string[]) => {
+	const filePath = fp.resolve(...path)
+
+	if (fs.existsSync(filePath)) {
+		return filePath
+	}
+
+	return filePath + '.' + extn
+}, (...args: string[]) => args.join('|'))

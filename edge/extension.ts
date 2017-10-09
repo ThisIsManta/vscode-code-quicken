@@ -144,7 +144,7 @@ export function activate(context: vscode.ExtensionContext) {
                 // For `import ...`
                 existingImports = existingImports.concat(currentCodeTree.program.body
                     .filter((line: any) => line.type === 'ImportDeclaration' && line.source && line.source.type === 'StringLiteral')
-                    .map((line: any) => ({ ...line.loc, name: _.get(_.find(line.specifiers, (spec: any) => spec.type === 'ImportDefaultSpecifier'), 'local.name'), path: line.source.value }))
+                    .map((line: any) => ({ ...line.loc, name: _.get(_.find(line.specifiers, (spec: any) => spec.type === 'ImportDefaultSpecifier'), 'local.name'), path: _.trimEnd(line.source.value, '/') }))
                 )
 
                 // For `var x = require(...)`
@@ -198,6 +198,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const selectCodeTree = Shared.getCodeTree(selectCodeText, select.fileInfo.fileExtensionWithoutLeadingDot, jsParserPlugins)
                 const selectRelativeFilePath = pattern.getRelativeFilePath(select.fileInfo, currentFileInfo.directoryPath)
                 const selectFileHasDefaultExport = selectCodeTree === null || Shared.findInCodeTree(selectCodeTree, Shared.EXPORT_DEFAULT) !== undefined || Shared.findInCodeTree(selectCodeTree, Shared.MODULE_EXPORTS) !== undefined
+                const isIndexFile = select.fileInfo.fileNameWithoutExtension === 'index' && select.fileInfo.directoryPath !== currentFileInfo.directoryPath
 
                 let selectVariableNameFromIndexFile = ''
                 let selectVariableNameFromCurrentFile = ''
@@ -238,14 +239,13 @@ export function activate(context: vscode.ExtensionContext) {
                     selectVariableNameFromCurrentFile: selectVariableNameFromCurrentFile,
                     selectVariableNameFromIndexFile: selectVariableNameFromIndexFile,
                     workspacePath: vscode.workspace.rootPath,
-                    isIndexFile: select.fileInfo.fileNameWithoutExtension === 'index' && select.fileInfo.directoryPath !== currentFileInfo.directoryPath,
-                    exportedByIndexFile: select.getExportedVariablesFromIndexFile(jsParserPlugins),
+                    isIndexFile: isIndexFile,
                     ...Shared,
                 })
 
                 if (pattern.checkForImportOrRequire) {
                     if (existingImports.find(stub => stub.path === selectRelativeFilePath)) {
-                        vscode.window.showInformationMessage(`The file '${selectRelativeFilePath}' has been already imported.`)
+                        vscode.window.showInformationMessage(`The file '${select.label}' has been already imported.`)
                         return null
                     } else {
                         const snippetTree = Shared.getCodeTree(snippet, currentDocument.languageId, jsParserPlugins)
