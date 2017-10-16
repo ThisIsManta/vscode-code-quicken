@@ -1,23 +1,17 @@
-interface FileConfiguration {
-	path: string | Array<string>
-	code: string | string[] | { fromFile: string }
-	when?: string
-	checkForImportOrRequire: boolean,
-	interpolate: (object) => string
-	omitExtensionInSelectFilePath: boolean | string
-	insertAt: string
+import * as vscode from 'vscode'
+import * as JavaScript from './JavaScript'
+
+interface Configuration {
+	rememberLastSelection: number
+	javascript: JavaScript.LanguageOptions
 }
 
-interface NodeConfiguration {
-	name: string
-	code: string | string[] | { fromFile: string }
-	when?: string
-	checkForImportOrRequire: boolean,
-	insertAt: string
+interface Language {
+	support: RegExp
+	getItems(conf: Configuration): Promise<Array<vscode.QuickPickItem>>
+	reset()
 }
 
-interface TextConfiguration {
-	name: string
-	code: string | string[] | { fromFile: string }
-	when?: string
+interface Item extends vscode.QuickPickItem {
+	insertImport(document: vscode.TextDocument): Promise<(worker: vscode.TextEditorEdit) => void | null | undefined>
 }

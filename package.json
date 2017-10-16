@@ -1,7 +1,7 @@
 {
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
-    "description": "Create your powerful context-aware snippets.",
+    "description": "Insert import/require statement quickly.",
     "version": "0.0.10",
     "publisher": "thisismanta",
     "categories": [
@@ -29,215 +29,77 @@
         "vscode": "^1.12.0"
     },
     "activationEvents": [
-        "onCommand:codeQuicken.showAll",
-        "onCommand:codeQuicken.showFiles",
-        "onCommand:codeQuicken.showNodes",
-        "onCommand:codeQuicken.showTexts",
-        "onCommand:codeQuicken.fixImports"
+        "onCommand:codeQuicken.addImport",
+        "onCommand:codeQuicken.fixImport"
     ],
     "main": "./dist/extension",
     "contributes": {
         "commands": [
             {
-                "command": "codeQuicken.showAll",
-                "title": "Code Quicken: Insert a snippet"
+                "command": "codeQuicken.addImport",
+                "title": "Code Quicken: Insert an import/require statement"
             },
             {
-                "command": "codeQuicken.showFiles",
-                "title": "Code Quicken: Insert a file-based snippet"
-            },
-            {
-                "command": "codeQuicken.showNodes",
-                "title": "Code Quicken: Insert a Node-module snippet"
-            },
-            {
-                "command": "codeQuicken.showTexts",
-                "title": "Code Quicken: Insert a context-aware snippet"
-            },
-            {
-                "command": "codeQuicken.fixImports",
-                "title": "Code Quicken: Fix broken import/require statements"
+                "command": "codeQuicken.fixImport",
+                "title": "Code Quicken: Fix import/require statements"
             }
         ],
         "configuration": {
             "title": "Code Quicken",
             "properties": {
-                "codeQuicken.files": {
-                    "description": "Represent file snippets.",
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": [
-                            "path",
-                            "code"
-                        ],
-                        "properties": {
-                            "path": {
-                                "description": "Represent a glob pattern of files to be listed in the quick pick.\nSpecifying an exclamation mark (!) in front of the pattern will exclude those files from the list.",
-                                "type": [
-                                    "string",
-                                    "array"
-                                ],
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "when": {
-                                "description": "Control when this pattern is available against the current active document.",
-                                "type": "string"
-                            },
-                            "code": {
-                                "description": "Represent the code to be inserted to the current active document.",
-                                "type": [
-                                    "string",
-                                    "array"
-                                ]
-                            },
-                            "omitExtensionInSelectFilePath": {
-                                "description": "Remove file extension from `selectFilePath` variable in `code`.\nSpecifying `true` will strip all extension from `selectFilePath` variable of `code` setting.",
-                                "type": [
-                                    "boolean",
-                                    "string"
-                                ],
-                                "default": false
-                            },
-                            "checkForImportOrRequire": {
-                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
-                                "type": "boolean",
-                                "default": false
-                            },
-                            "insertAt": {
-                                "description": "Insert the code to the select position of the current active document.",
-                                "enum": [
-                                    "beforeFirstImport",
-                                    "afterLastImport",
-                                    "top",
-                                    "bottom",
-                                    "cursor"
-                                ],
-                                "default": "cursor"
-                            }
+                "codeQuicken.rememberLastSelection": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 3
+                },
+                "codeQuicken.javascript.preferImports": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.removeFileExtension": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.removeIndexFile": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.removeSemiColons": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.preferSingleQuotes": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.groupImports": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.javascript.namingConvention": {
+                    "type": "string",
+                    "enum": [
+                        "camelCase",
+                        "snake_case",
+                        "lowercase",
+                        "as-is"
+                    ],
+                    "default": "camelCase"
+                },
+                "codeQuicken.javascript.predefinedNames": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".": {
+                            "type": "string"
                         }
                     },
-                    "default": [
-                        {
-                            "path": "**/*.js",
-                            "code": "import ${selectFileHasDefaultExport ? '' : '* as '}${getProperVariableName(selectFileInfo.fileNameWithoutExtension)} from '${selectFilePath}';\n",
-                            "checkForImportOrRequire": true,
-                            "insertAt": "beforeFirstImport"
-                        },
-                        {
-                            "path": "**/*.css",
-                            "when": "activeDocument.languageId === 'css'",
-                            "code": "@import '${selectFilePath}'\n"
-                        },
-                        {
-                            "path": "**/*.styl",
-                            "when": "activeDocument.languageId === 'stylus'",
-                            "code": "@import '${selectFilePath}'\n"
-                        }
-                    ]
-                },
-                "codeQuicken.nodes": {
-                    "type": "array",
-                    "description": "Represent node module snippets.",
-                    "items": {
-                        "type": "object",
-                        "required": [
-                            "name",
-                            "code"
-                        ],
-                        "properties": {
-                            "name": {
-                                "description": "Represent a module name in glob pattern.",
-                                "type": "string"
-                            },
-                            "code": {
-                                "description": "Represent the code to be inserted to the current active document.",
-                                "type": [
-                                    "string",
-                                    "array"
-                                ]
-                            },
-                            "checkForImportOrRequire": {
-                                "description": "Check for duplicate import/require statements or not. Turning this off if the code have no import/require statements.",
-                                "type": "boolean",
-                                "default": false
-                            },
-                            "insertAt": {
-                                "description": "Insert the code to the select position of the current active document.",
-                                "enum": [
-                                    "beforeFirstImport",
-                                    "afterLastImport",
-                                    "top",
-                                    "bottom",
-                                    "cursor"
-                                ],
-                                "default": "cursor"
-                            }
-                        }
-                    },
-                    "default": [
-                        {
-                            "name": "*",
-                            "code": "import ${getProperVariableName(moduleName)} from '${moduleName}';\n",
-                            "checkForImportOrRequire": true
-                        }
-                    ]
-                },
-                "codeQuicken.texts": {
-                    "type": "array",
-                    "description": "Represent text snippets.",
-                    "items": {
-                        "type": "object",
-                        "required": [
-                            "name",
-                            "code"
-                        ],
-                        "properties": {
-                            "name": {
-                                "description": "Represent a name of this snippet.",
-                                "type": "string"
-                            },
-                            "when": {
-                                "description": "Control when this pattern is available against the current active document.",
-                                "type": "string"
-                            },
-                            "code": {
-                                "description": "Represent the code to be inserted to the current active document.",
-                                "type": [
-                                    "string",
-                                    "array"
-                                ]
-                            }
-                        }
-                    }
-                },
-                "codeQuicken.javascript.parser.plugins": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "A list of plug-in names for Babylon JavaScript parser.\nSee also https://www.npmjs.com/package/babylon#plugins",
-                    "default": [
-                        "jsx",
-                        "flow",
-                        "doExpressions",
-                        "objectRestSpread",
-                        "decorators",
-                        "classProperties",
-                        "exportExtensions",
-                        "asyncGenerators",
-                        "functionBind",
-                        "functionSent",
-                        "dynamicImport"
-                    ]
+                    "default": {}
                 }
             }
         },
         "keybindings": [
             {
-                "command": "codeQuicken.showAll",
+                "command": "codeQuicken.addImport",
                 "key": "ctrl+shift+i"
             }
         ]
