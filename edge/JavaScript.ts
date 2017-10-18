@@ -4,7 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as babylon from 'babylon'
 
-import { Configuration, Language, Item } from './global';
+import { RootConfigurations, Language, Item } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -18,53 +18,229 @@ export interface LanguageOptions {
 	predefinedNames: object
 }
 
-let fileCache: Array<FileItem>
-let nodeCache: Array<NodeItem>
-
 export default class JavaScript implements Language {
-	support = /(java|type)script(react)?/
+	private baseConfig: RootConfigurations
+	private fileItemCache: Array<FileItem>
+	private nodeItemCache: Array<NodeItem>
 
-	async getItems(conf: Configuration) {
+	constructor(baseConfig: RootConfigurations) {
+		this.baseConfig = baseConfig
+	}
+
+	async getItems(document: vscode.TextDocument) {
+		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+			return null
+		}
+
 		let items: Array<vscode.QuickPickItem>
 
-		const currentFileInfo = new FileInfo(vscode.window.activeTextEditor.document.fileName)
+		const documentFileInfo = new FileInfo(document.fileName)
+		const documentIsJavaScript = JAVASCRIPT_FILE_EXTENSION.test(documentFileInfo.fileExtensionWithoutLeadingDot)
 
-		if (!fileCache) {
-			// const exclusionList = vscode.workspace.getConfiguration('files').get('exclude')
-			// exclude binary, typescript (if current doc is JS)
-			const fileList = await vscode.workspace.findFiles('**/*', /* '{' + exclusionList.join(',') + '}' */)
-			fileCache = fileList
-				.map(fileLink => new FileInfo(fileLink.fsPath))
-				.filter(fileInfo => fileInfo.fileExtensionWithoutLeadingDot === 'js')
-				.map(fileInfo => new FileItem(fileInfo, conf))
+		if (!this.fileItemCache) {
+			const fileLinks = await vscode.workspace.findFiles('**/*.*')
+
+			this.fileItemCache = fileLinks
+				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), this.baseConfig.javascript))
 		}
-		items = _.chain(fileCache)
-			.reject(item => item.fileInfo.fullPath === currentFileInfo.fullPath) // Remove the current file
+
+		items = _.chain(this.fileItemCache)
+			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
+			.reject(item => documentIsJavaScript ? TYPESCRIPT_FILE_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot) : false) // Remove TypeScript files as JavaScript does not recognize them anyway
 			.uniq() // Remove duplicate files
-			.forEach(item => item.updateSortablePath(currentFileInfo.directoryPath))
+			.forEach(item => item.updateSortablePath(documentFileInfo.directoryPath))
 			.sortBy([ // Sort files by their path and name
 				item => item.sortablePath,
 				item => item.sortableName,
 			])
 			.value()
 
-		if (!nodeCache && fs.existsSync(fp.join(vscode.workspace.rootPath, 'package.json'))) {
-			const packageJson = require(fp.join(vscode.workspace.rootPath, 'package.json'))
+		const packageJsonPath = fp.join(vscode.workspace.rootPath, 'package.json')
+		if (!this.nodeItemCache && fs.existsSync(packageJsonPath)) {
+			const packageJson = require(packageJsonPath)
 
-			nodeCache = _.chain([_.keys(packageJson.devDependencies), _.keys(packageJson.dependencies)])
+			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
+				.map(_.keys)
 				.flatten<string>()
-				.map(name => new NodeItem(name, conf.javascript))
+				.map(name => new NodeItem(name, this.baseConfig.javascript))
 				.sortBy(item => item.name)
 				.value()
 		}
-		items = items.concat(nodeCache || [])
+
+		items = items.concat(this.nodeItemCache || [])
 
 		return items
 	}
 
+	async fixImport(document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
+		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+			return null
+		}
+
+		const actions: Array<(worker: vscode.TextEditorEdit) => void> = []
+
+		const documentFileInfo = new FileInfo(document.fileName)
+
+		class FilePath implements vscode.QuickPickItem {
+			readonly label: string
+			readonly description: string
+			readonly fullPath: string
+
+			constructor(fullPath: string, originalPath: string) {
+				this.fullPath = fullPath
+
+				const fileInfo = new FileInfo(fullPath)
+				const relaPath = fileInfo.getRelativePath(documentFileInfo.directoryPath)
+				const fileName = fp.basename(relaPath)
+				const fileExtn = fp.extname(relaPath)
+				const dirxName = _.last(fp.dirname(relaPath).split(/\\|\//))
+
+				// TODO
+				this.description = fp.dirname(_.trim(fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep), '/'))
+
+				if (fileName === ('index.' + documentFileInfo.fileExtensionWithoutLeadingDot) && originalPath.endsWith(dirxName)) {
+					this.label = relaPath.substring(0, relaPath.length - fileName.length - 1)
+
+				} else if (originalPath.endsWith(fileExtn)) {
+					this.label = relaPath
+
+				} else {
+					this.label = relaPath.substring(0, relaPath.length - fileExtn.length)
+				}
+			}
+		}
+
+		class ImportStatementForEditing {
+			originalPath: string
+			possiblePath: FilePath[] = []
+			editableRange: vscode.Range
+			quoteChar: string = '"'
+
+			constructor(path: string, loc: { start: { line: number, column: number }, end: { line: number, column: number } }) {
+				this.originalPath = path
+				this.editableRange = new vscode.Range(loc.start.line - 1, loc.start.column, loc.end.line - 1, loc.end.column)
+
+				const originalText = document.getText(this.editableRange)
+				if (originalText.startsWith('\'')) {
+					this.quoteChar = '\''
+				}
+			}
+		}
+
+		const codeTree = JavaScript.parse(document.getText())
+
+		const totalImports = _.flatten([
+			_.chain(codeTree.program.body)
+				.filter(node =>
+					node.type === 'ImportDeclaration' &&
+					node.source.value.startsWith('.') &&
+					node.source.value.includes('?') === false &&
+					node.source.value.includes('!') === false &&
+					node.source.value.includes('"') === false
+				)
+				.map((node: any) => new ImportStatementForEditing(node.source.value, node.source.loc))
+				.value(),
+			_.chain(findRequireRecursively(codeTree.program.body))
+				.filter(node => node.arguments[0].value.startsWith('.'))
+				.map(node => new ImportStatementForEditing(node.arguments[0].value, node.arguments[0].loc))
+				.value(),
+		]).filter(item => item.originalPath)
+
+		const invalidImports = totalImports.filter(item =>
+			fs.existsSync(fp.join(documentFileInfo.directoryPath, item.originalPath)) === false &&
+			fs.existsSync(fp.join(documentFileInfo.directoryPath, item.originalPath + '.' + documentFileInfo.fileExtensionWithoutLeadingDot)) === false
+		)
+
+		if (invalidImports.length === 0) {
+			vscode.window.setStatusBarMessage('Code Quicken: No broken import/require statements have been found.', 5000)
+			return null
+		}
+
+		for (const item of invalidImports) {
+			if (cancellationToken.isCancellationRequested) {
+				return null
+			}
+
+			const sourceFileName = _.last(item.originalPath.split(/\\|\//))
+			const matchingImports = await findFilesRoughly(sourceFileName, documentFileInfo.fileExtensionWithoutLeadingDot)
+
+			item.possiblePath = matchingImports.map(fullPath => new FilePath(fullPath, item.originalPath))
+
+			if (item.possiblePath.length > 1) {
+				// Given originalPath = '../../../abc/xyz.js'
+				// Return originalPathList = ['abc', 'xyz'.js']
+				const originalPathList = item.originalPath.split(/\\|\//).slice(0, -1).filter(pathUnit => pathUnit !== '.' && pathUnit !== '..')
+
+				let count = 0
+				while (++count <= originalPathList.length) {
+					const refinedPath = item.possiblePath.filter(path =>
+						path.fullPath.split(/\\|\//).slice(0, -1).slice(-count).join('|') === originalPathList.slice(-count).join('|')
+					)
+					if (refinedPath.length === 1) {
+						item.possiblePath = refinedPath
+						break
+					}
+				}
+			}
+		}
+
+		if (cancellationToken.isCancellationRequested) {
+			return null
+		}
+
+		const unresolvedImports = invalidImports.filter(item => item.possiblePath.length !== 1)
+		const resolvableImports = unresolvedImports.filter(item => item.possiblePath.length > 1)
+
+		for (const item of resolvableImports) {
+			const selectedPath = await vscode.window.showQuickPick(
+				item.possiblePath,
+				{ placeHolder: item.originalPath }
+			)
+
+			if (!selectedPath) {
+				break
+			}
+
+			if (cancellationToken.isCancellationRequested) {
+				return null
+			}
+
+			actions.push(worker => {
+				const span = item.editableRange
+				const path = `${item.quoteChar}${selectedPath.label}${item.quoteChar}`
+				worker.replace(span, path)
+			})
+
+			_.pull(unresolvedImports, item)
+		}
+
+		if (cancellationToken.isCancellationRequested) {
+			return null
+		}
+
+		if (unresolvedImports.length === 0) {
+			vscode.window.setStatusBarMessage('All broken import/require statements have been fixed.', 5000)
+
+		} else {
+			vscode.window.showWarningMessage(`Code Quicken: There ${unresolvedImports.length === 1 ? 'was' : 'were'} ${unresolvedImports.length} broken import/require statement${unresolvedImports.length === 1 ? '' : 's'} that had not been fixed.\n` + unresolvedImports.map(item => item.originalPath).join('\n'))
+		}
+
+		for (const item of invalidImports) {
+			if (item.possiblePath.length === 1) {
+				actions.push(worker => {
+					const span = item.editableRange
+					const path = `${item.quoteChar}${item.possiblePath[0].label}${item.quoteChar}`
+					worker.replace(span, path)
+				})
+			}
+		}
+
+		return actions
+	}
+
 	reset() {
-		fileCache = null
-		nodeCache = null
+		this.fileItemCache = null
+		this.nodeItemCache = null
 	}
 
 	static parse(code: string) {
@@ -94,43 +270,53 @@ export default class JavaScript implements Language {
 }
 
 class FileItem implements Item {
-	private conf: Configuration
+	private options: LanguageOptions
 	readonly label: string
 	readonly description: string
-	readonly fileInfo: FileInfo
+	fileInfo: FileInfo
 	sortablePath: string
-	readonly sortableName: string
+	sortableName: string
 
-	constructor(fileInfo: FileInfo, conf: Configuration) {
+	constructor(fileInfo: FileInfo, options: LanguageOptions) {
+		this.options = options
 		this.fileInfo = fileInfo
-		this.conf = conf
 
-		if (this.conf.javascript.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
+		if (this.options.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
 			this.label = this.fileInfo.directoryName
-		} else if (this.conf.javascript.removeFileExtension) {
+		} else if (this.options.removeFileExtension) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
 		}
 
+		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
 
+		// Set sorting rank according to the file name
 		if (this.fileInfo.fileNameWithoutExtension === 'index') {
+			// Make index file appear on the top of its directory
 			this.sortableName = '!'
 		} else {
 			this.sortableName = this.fileInfo.fileNameWithExtension.toLowerCase()
 		}
 	}
 
-	updateSortablePath(currentDirectoryPath: string) {
+	updateSortablePath(directoryPathOfWorkingDocument: string) {
+		// Set sorting rank according to the directory path
+		// a = the opening files in VS Code
+		// b = the files that are located in the same directory of the working document
+		// cez = "./dir/file"
+		// fd = "../file"
+		// fez = "../dir/file"
+		// ffd = "../../file"
 		if (vscode.workspace.textDocuments.find(document => document.fileName === this.fileInfo.fullPath) !== undefined) {
 			this.sortablePath = 'a'
 
-		} else if (this.fileInfo.directoryPath === currentDirectoryPath) {
+		} else if (this.fileInfo.directoryPath === directoryPathOfWorkingDocument) {
 			this.sortablePath = 'b'
 
 		} else {
-			this.sortablePath = this.fileInfo.getRelativePath(currentDirectoryPath).split('/').map((chunk, index, array) => {
+			this.sortablePath = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument).split('/').map((chunk, index, array) => {
 				if (chunk === '.') return 'c'
 				else if (chunk === '..') return 'f'
 				else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'd'
@@ -140,99 +326,111 @@ class FileItem implements Item {
 		}
 	}
 
-	async insertImport(document: vscode.TextDocument) {
+	async addImport(document: vscode.TextDocument) {
 		const codeTree = JavaScript.parse(document.getText())
 
 		const existingImports = getExistingImports(codeTree)
 
-		const currentDirectoryPath = new FileInfo(document.fileName).directoryPath
+		const directoryPathOfWorkingDocument = new FileInfo(document.fileName).directoryPath
 
-		let top = new vscode.Position(0, 0)
+		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			top = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
+			beforeFirstImport = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
 		}
 
-		if (/^(jsx?|tsx?)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.conf.javascript)
-			let path = this.fileInfo.getRelativePath(currentDirectoryPath)
+		// For JS/TS, insert `import ... from "file.js" with rich features`
+		// For CSS/LESS/SASS/SCSS/Styl, insert `import "file.css"`
+		// Otherwise, insert `require("...")`
+		if (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+			// Set default imported variable name and its path
+			let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
+			let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-			if (this.conf.javascript.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
-				name = getVariableName(this.fileInfo.directoryName, this.conf.javascript)
-				path = path.replace(new RegExp('/' + _.escapeRegExp(this.fileInfo.fileNameWithExtension) + '$'), '')
+			if (this.options.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
+				// Set the imported variable name to the directory name
+				name = getVariableName(this.fileInfo.directoryName, this.options)
 
-			} else if (this.conf.javascript.removeFileExtension) {
-				path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
+				// Remove "/index.js" from the imported path
+				path = fp.dirname(path)
+
+			} else if (this.options.removeFileExtension) {
+				// Remove file extension from the imported path only if it matches the working document
+				path = path.replace(new RegExp(_.escapeRegExp('\\.' + this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 			}
 
-			let done = false
+			let foundIndexFileAndWentForIt = false
 
-			// const hasImportedDefault = duplicateImport.node.type === 'ImportDeclaration' && _.some(duplicateImport.node.specifiers, (node: any) => node.type === 'ImportDefaultSpecifier')
-
-			if (this.conf.javascript.preferImports) {
+			if (this.options.preferImports) {
 				if (this.hasIndexFile()) {
 					const exportedVariables = this.getExportedVariablesFromIndexFile()
 
-					let indexRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(currentDirectoryPath)
+					let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(directoryPathOfWorkingDocument)
 					if (this.fileInfo.fileNameWithoutExtension !== 'index') {
-						if (this.conf.javascript.removeIndexFile) {
-							indexRelativePath = fp.dirname(indexRelativePath)
+						if (this.options.removeIndexFile) {
+							indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-						} else if (this.conf.javascript.removeFileExtension) {
-							indexRelativePath = indexRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexRelativePath)) + '$'), '')
+						} else if (this.options.removeFileExtension) {
+							indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
 						}
 					}
 
-					const duplicateImportForIndexFile = findDuplicateImport(existingImports, indexRelativePath)
-					const hasImportedEverything = duplicateImportForIndexFile && duplicateImportForIndexFile.node.type === 'ImportDeclaration' && duplicateImportForIndexFile.node.specifiers[0].type === 'ImportNamespaceSpecifier'
-					if (exportedVariables.length > 0 && hasImportedEverything) {
-						vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexRelativePath}".`)
+					const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
+					const duplicateImportHasImportedEverything = _.isMatch(duplicateImportForIndexFile, IMPORT_EVERYTHING)
+
+					// Stop processing if there is `import * as name from "path"`
+					if (exportedVariables.length > 0 && duplicateImportHasImportedEverything) {
+						vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`)
 						// TODO: move focus to the statement
 						return null
 					}
 
 					if (exportedVariables.length === 1) {
+						// Set `import { name } from "path/index.js"` when the index file exports only one
 						name = exportedVariables[0]
 						name = `{ ${name} }`
 
-						if (this.fileInfo.fileNameWithoutExtension !== 'index') {
-							path = indexRelativePath
-						}
+						path = indexFileRelativePath
 
-						done = true
+						foundIndexFileAndWentForIt = true
 
 					} else if (exportedVariables.length > 1) {
-						name = await vscode.window.showQuickPick(['*', ...exportedVariables])
+						// Let the user choose between `import * as name from "path/index.js"` or `import { name } from "path/index.js"`
+						const selectedName = await vscode.window.showQuickPick(['*', ...exportedVariables])
 
-						if (!name) {
+						if (!selectedName) {
 							return null
 						}
 
-						if (name === '*') {
+						if (selectedName === '*') {
 							name = '* as ' + name
 						} else {
-							name = `{ ${name} }`
+							name = `{ ${selectedName} }`
 						}
 
-						if (this.fileInfo.fileNameWithoutExtension !== 'index') {
-							path = indexRelativePath
-						}
+						path = indexFileRelativePath
 
-						done = true
+						foundIndexFileAndWentForIt = true
 					}
 				}
 
-				if (done === false) {
+				if (foundIndexFileAndWentForIt === false) {
 					const codeText = fs.readFileSync(this.fileInfo.fullPath, 'utf-8')
 					const codeTree = JavaScript.parse(codeText)
 
-					const hasDefaultExport = codeTree === null || findInCodeTree(codeTree, EXPORT_DEFAULT) !== undefined || findInCodeTree(codeTree, MODULE_EXPORTS) !== undefined
+					const foreignFileHasDefaultExport = (
+						codeTree === null ||
+						findInCodeTree(codeTree, EXPORT_DEFAULT) !== undefined ||
+						findInCodeTree(codeTree, MODULE_EXPORTS) !== undefined
+					)
 
-					if (hasDefaultExport === false) {
+					if (foreignFileHasDefaultExport === false) {
 						const exportedVariables = getExportedVariables(this.fileInfo.fullPath)
 						if (exportedVariables.length === 0) {
+							// Set `import * as name from "path"` when the file does not export anything
 							name = '* as ' + name
 
 						} else {
+							// Let the user choose between `import * as name from "path"` or `import { name } from "path"`
 							name = await vscode.window.showQuickPick(['*', ...exportedVariables])
 
 							if (!name) {
@@ -249,21 +447,23 @@ class FileItem implements Item {
 				}
 			}
 
-			const duplicateImport = findDuplicateImport(existingImports, path)
+			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
-				if (this.conf.javascript.groupImports && duplicateImport.node.type === 'ImportDeclaration' && name.startsWith('*') === false) {
+				// Try merging named imports together
+				// Note that we cannot merge with `import * as name from "path"`
+				if (this.options.groupImports && duplicateImport.node.type === 'ImportDeclaration' && name.startsWith('*') === false) {
 					const originalName = name.startsWith('{')
 						? name.substring(1, name.length - 1).trim() // Remove brackets from `{ name }`
 						: name
 
 					let duplicateNamedImport = null
-					const nodeList = duplicateImport.node.specifiers as Array<any>
-					for (let node of nodeList) {
-						if (node.type === 'ImportDefaultSpecifier' && name.startsWith('{') === false) {
+					const importedVariables = duplicateImport.node.specifiers as Array<any>
+					for (let node of importedVariables) {
+						if (node.type === 'ImportDefaultSpecifier' && name.startsWith('{') === false) { // In case of `import name from "path"`
 							duplicateNamedImport = node
 							break
 
-						} else if (node.type === 'ImportSpecifier' && node.imported.name === originalName) {
+						} else if (node.type === 'ImportSpecifier' && node.imported.name === originalName) { // In case of `import { name } from "path"`
 							duplicateNamedImport = node
 							break
 						}
@@ -275,20 +475,19 @@ class FileItem implements Item {
 						return null
 					}
 
-					if (name.startsWith('{')) {
-						const lastNamedImport = _.findLast(nodeList, node => node.type === 'ImportSpecifier')
+					if (name.startsWith('{')) { // In case of `import { name } from "path"`
+						const lastNamedImport = _.findLast(importedVariables, node => node.type === 'ImportSpecifier')
 						if (lastNamedImport) {
 							const afterLastName = new vscode.Position(lastNamedImport.loc.end.line - 1, lastNamedImport.loc.end.column)
 							return (worker: vscode.TextEditorEdit) => worker.insert(afterLastName, ', ' + originalName)
 
 						} else {
-							const lastAnyImport = _.last(nodeList)
+							const lastAnyImport = _.last(importedVariables)
 							const afterLastName = new vscode.Position(lastAnyImport.loc.end.line - 1, lastAnyImport.loc.end.column)
 							return (worker: vscode.TextEditorEdit) => worker.insert(afterLastName, ', ' + name)
 						}
 
-					} else {
-						// Add import default
+					} else { // In case of `import name from "path"`
 						const beforeFirstName = new vscode.Position(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column + ('import '.length))
 						return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstName, name + ', ')
 					}
@@ -300,26 +499,27 @@ class FileItem implements Item {
 				}
 			}
 
-			const snippet = getImportSnippet(name, path, this.conf.javascript.preferImports, this.conf.javascript, document)
+			const snippet = getImportSnippet(name, path, this.options.preferImports, this.options, document)
 
-			return (worker: vscode.TextEditorEdit) => worker.insert(top, snippet)
+			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
-		} else if (/^(css|less|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			const path = this.fileInfo.getRelativePath(currentDirectoryPath)
+		} else if (/^(css|less|sass|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+			const path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-			if (findDuplicateImport(existingImports, path)) {
+			const duplicateImport = getDuplicateImport(existingImports, path)
+			if (duplicateImport) {
 				vscode.window.showInformationMessage(`The module "${this.label}" has been already imported.`)
 				// TODO: move focus to the statement
 				return null
 			}
 
-			const snippet = getImportSnippet(null, path, this.conf.javascript.preferImports, this.conf.javascript, document)
+			const snippet = getImportSnippet(null, path, this.options.preferImports, this.options, document)
 
-			return (worker: vscode.TextEditorEdit) => worker.insert(top, snippet)
+			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
 		} else {
-			const path = this.fileInfo.getRelativePath(currentDirectoryPath)
-			const snippet = getImportSnippet(null, path, false, this.conf.javascript, document)
+			const path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+			const snippet = getImportSnippet(null, path, false, this.options, document)
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(vscode.window.activeTextEditor.selection.active, snippet)
 		}
@@ -327,25 +527,6 @@ class FileItem implements Item {
 
 	private getIndexPath() {
 		return fp.resolve(this.fileInfo.directoryPath, 'index.' + this.fileInfo.fileExtensionWithoutLeadingDot)
-
-		/* const extn = this.fileInfo.fileExtensionWithoutLeadingDot
-		let pathList: Array<string> = []
-
-		if (extn.startsWith('ts')) {
-			if (extn.endsWith('x')) {
-				pathList.push(fp.resolve(this.fileInfo.directoryPath, 'index.tsx'))
-			}
-			pathList.push(fp.resolve(this.fileInfo.directoryPath, 'index.ts'))
-		}
-
-		if (extn.startsWith('js')) {
-			if (extn.endsWith('x')) {
-				pathList.push(fp.resolve(this.fileInfo.directoryPath, 'index.jsx'))
-			}
-			pathList.push(fp.resolve(this.fileInfo.directoryPath, 'index.js'))
-		}
-
-		return pathList.find(path => fs.existsSync(path)) || '' */
 	}
 
 	private hasIndexFile() {
@@ -426,19 +607,20 @@ class FileItem implements Item {
 }
 
 class NodeItem implements Item {
-	private conf: LanguageOptions
+	private options: LanguageOptions
 	readonly label: string
 	readonly description: string = ''
 	readonly name: string
 	readonly path: string
 
-	constructor(name: string, conf: LanguageOptions) {
+	constructor(name: string, options: LanguageOptions) {
 		this.label = name
-		this.name = getVariableName(name, conf)
+		this.name = getVariableName(name, options)
 		this.path = name
 
-		this.conf = conf
+		this.options = options
 
+		// Set version of the module as the description
 		try {
 			const packageJson = require(fp.join(vscode.workspace.rootPath, 'node_modules', name, 'package.json'))
 			if (packageJson.version) {
@@ -447,18 +629,15 @@ class NodeItem implements Item {
 		} catch (ex) { }
 	}
 
-	async insertImport(document: vscode.TextDocument) {
+	async addImport(document: vscode.TextDocument) {
 		let name = this.name
 		if (/typescript(react)?/.test(document.languageId)) {
 			name = `* as ${name}`
 		}
 
-		const snippet = getImportSnippet(name, this.path, this.conf.preferImports, this.conf, document)
+		const codeTree = JavaScript.parse(document.getText())
 
-		const tree = JavaScript.parse(document.getText())
-
-		const existingImports = getExistingImports(tree)
-
+		const existingImports = getExistingImports(codeTree)
 		if (existingImports.find(item => item.path === this.path)) {
 			vscode.window.showInformationMessage(`The module "${this.path}" has been already imported.`)
 			return null
@@ -469,9 +648,17 @@ class NodeItem implements Item {
 			position = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
 		}
 
+		const snippet = getImportSnippet(name, this.path, this.options.preferImports, this.options, document)
+
 		return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
 	}
 }
+
+const SUPPORTED_LANGUAGE = /^(java|type)script(react)?/
+
+const JAVASCRIPT_FILE_EXTENSION = /^jsx?$/
+
+const TYPESCRIPT_FILE_EXTENSION = /^tsx?$/
 
 export const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
 
@@ -512,16 +699,24 @@ export const MODULE_REQUIRE_IMMEDIATE = {
 	}
 }
 
-interface ImportStatement {
+const IMPORT_EVERYTHING = {
+	type: 'ImportDeclaration',
+	specifiers: [
+		{
+			type: 'ImportNamespaceSpecifier'
+		}
+	]
+}
+
+interface ImportStatementForReadOnly {
 	node: any,
-	// name?: string | Array<string>,
 	path: string,
 	start: { line: number, column: number },
 	end: { line: number, column: number },
 }
 
 function getExistingImports(codeTree: any) {
-	let imports: ImportStatement[] = []
+	let imports: ImportStatementForReadOnly[] = []
 	if (codeTree && codeTree.program && codeTree.program.body) {
 		// For `import '...'`
 		//     `import name from '...'`
@@ -531,7 +726,6 @@ function getExistingImports(codeTree: any) {
 			.map((stub: any) => ({
 				node: stub,
 				...stub.loc,
-				// name: _.get(_.find(stub.specifiers, (spec: any) => spec.type === 'ImportDefaultSpecifier'), 'local.name'),
 				path: _.trimEnd(stub.source.value, '/'),
 			}))
 		)
@@ -545,7 +739,6 @@ function getExistingImports(codeTree: any) {
 				.map(stub => ({
 					node: stub,
 					...line.loc,
-					// name: stub.id.name,
 					path: stub.init.arguments[0].value,
 				}))
 			)
@@ -564,8 +757,8 @@ function getExistingImports(codeTree: any) {
 	return imports
 }
 
-function getVariableName(name: string, conf: LanguageOptions) {
-	const predefinedNames = _.toPairs(conf.predefinedNames)
+function getVariableName(name: string, options: LanguageOptions) {
+	const predefinedNames = _.toPairs(options.predefinedNames) as Array<Array<string>>
 	for (let pair of predefinedNames) {
 		if (pair[0].startsWith('/') && pair[0].substring(1).includes('/')) {
 			const regx = new RegExp(pair[0].substring(1, pair[0].length - 1), pair[0].substring(pair[0].lastIndexOf('/') + 1))
@@ -578,13 +771,13 @@ function getVariableName(name: string, conf: LanguageOptions) {
 		}
 	}
 
-	if (conf.namingConvention === 'camelCase') {
+	if (options.namingConvention === 'camelCase') {
 		return _.camelCase(name) || name
 
-	} else if (conf.namingConvention === 'snake_case') {
+	} else if (options.namingConvention === 'snake_case') {
 		return _.snakeCase(name) || name
 
-	} else if (conf.namingConvention === 'lowercase') {
+	} else if (options.namingConvention === 'lowercase') {
 		return name.toLowerCase()
 
 	} else {
@@ -592,8 +785,8 @@ function getVariableName(name: string, conf: LanguageOptions) {
 	}
 }
 
-function getImportSnippet(name: string, path: string, useImport: boolean, conf: LanguageOptions, document: vscode.TextDocument) {
-	if (conf.preferSingleQuotes) {
+function getImportSnippet(name: string, path: string, useImport: boolean, options: LanguageOptions, document: vscode.TextDocument) {
+	if (options.preferSingleQuotes) {
 		path = `'${path}'`
 	} else {
 		path = `"${path}"`
@@ -615,7 +808,7 @@ function getImportSnippet(name: string, path: string, useImport: boolean, conf: 
 		}
 	}
 
-	return code + (conf.removeSemiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
+	return code + (options.removeSemiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
 }
 
 function findInCodeTree(source: object, target: object) {
@@ -694,49 +887,54 @@ function getExportedVariables(filePath: string): Array<string> {
 	return []
 }
 
-function getFilePathWithExtension(extn: string, ...path: string[]) {
+function getFilePathWithExtension(expectedFileExtension: string, ...path: string[]) {
 	const filePath = fp.resolve(...path)
 
 	if (fs.existsSync(filePath)) {
 		return filePath
 	}
 
-	/* if (extn.startsWith('ts')) {
-		if (extn.endsWith('x') && fs.existsSync(filePath + '.tsx')) return filePath + '.tsx'
-		if (fs.existsSync(filePath + '.ts')) return filePath + '.ts'
-	}
-
-	if (extn.startsWith('ts') || extn.startsWith('js')) {
-		if (extn.endsWith('x') && fs.existsSync(filePath + '.jsx')) return filePath + '.jsx'
-		if (fs.existsSync(filePath + '.js')) return filePath + '.js'
-	} */
-
-	return filePath + '.' + extn
+	return filePath + '.' + expectedFileExtension
 }
 
-function findDuplicateImport(existingImports: Array<ImportStatement>, path: string) {
+function getDuplicateImport(existingImports: Array<ImportStatementForReadOnly>, path: string) {
 	return existingImports.find(stub => stub.path === path)
+}
 
-	/* for (let item of existingImports) {
-		if ((item.path.startsWith('./') || item.path.startsWith('../')) === false) {
-			continue
-		}
+async function findFilesRoughly(fileName: string, fileExtn: string) {
+	let list = await vscode.workspace.findFiles('**/' + fileName)
 
-		if (item.path === target) {
-			return true
-		}
-
-		// const path = getFilePathWithExtension(fileExtn, dirxPath, item.path)
-
-		let fileList = FileInfo.resolve(document.fileName, '..', item.path)
-		if (fileList.length === 0) {
-			continue
-		}
-
-		if (fileList.some(fileInfo => fileInfo.fullPath === target)) {
-			return true
-		}
+	if (fileName.endsWith('.' + fileExtn) === false) {
+		list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '.' + fileExtn))
+		list = list.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.' + fileExtn))
 	}
 
-	return false */
+	return list.map(item => item.fsPath)
+}
+
+function findRequireRecursively(node: any, results = [], visited = new Set()) {
+	if (visited.has(node)) {
+		return results
+
+	} else {
+		visited.add(node)
+	}
+
+	if (_.isArrayLike(node)) {
+		_.forEach(node, stub => {
+			findRequireRecursively(stub, results, visited)
+		})
+
+	} else if (_.isObject(node) && node.type !== undefined) {
+		if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require' && node.arguments.length === 1 && node.arguments[0].type === 'StringLiteral') {
+			results.push(node)
+			return results
+		}
+
+		_.forEach(node, stub => {
+			findRequireRecursively(stub, results, visited)
+		})
+	}
+
+	return results
 }

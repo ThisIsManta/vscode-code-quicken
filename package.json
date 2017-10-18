@@ -41,7 +41,7 @@
             },
             {
                 "command": "codeQuicken.fixImport",
-                "title": "Code Quicken: Fix import/require statements"
+                "title": "Code Quicken: Fix broken import/require statements"
             }
         ],
         "configuration": {
@@ -114,15 +114,12 @@
     "devDependencies": {
         "@types/babylon": "^6.16.2",
         "@types/lodash": "^4.14.73",
-        "@types/minimatch": "^2.0.29",
         "@types/node": "^6.0.86",
-        "typescript": "^2.4.2",
+        "typescript": "~2.5.3",
         "vscode": "^1.1.4"
     },
     "dependencies": {
         "babylon": "^6.18.0",
-        "glob": "^7.1.2",
-        "lodash": "^4.17.4",
-        "minimatch": "^3.0.4"
+        "lodash": "^4.17.4"
     }
 }
