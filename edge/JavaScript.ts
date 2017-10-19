@@ -72,9 +72,9 @@ export default class JavaScript implements Language {
 		return items
 	}
 
-	async fixImport(document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
+	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
 		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
-			return null
+			return false
 		}
 
 		const actions: Array<(worker: vscode.TextEditorEdit) => void> = []
@@ -95,8 +95,9 @@ export default class JavaScript implements Language {
 				const fileExtn = fp.extname(relaPath)
 				const dirxName = _.last(fp.dirname(relaPath).split(/\\|\//))
 
-				// TODO
-				this.description = fp.dirname(_.trim(fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep), '/'))
+				const relativePathWithoutDots = _.takeRightWhile(relaPath.split('/'), part => part !== '.' && part !== '..').join('/')
+				const relativePathFromWorkspace = fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep)
+				this.description = _.trim(relativePathFromWorkspace.substring(0, relativePathFromWorkspace.length - relativePathWithoutDots.length), '/')
 
 				if (fileName === ('index.' + documentFileInfo.fileExtensionWithoutLeadingDot) && originalPath.endsWith(dirxName)) {
 					this.label = relaPath.substring(0, relaPath.length - fileName.length - 1)
@@ -112,7 +113,7 @@ export default class JavaScript implements Language {
 
 		class ImportStatementForEditing {
 			originalPath: string
-			possiblePath: FilePath[] = []
+			matchingPath: FilePath[] = []
 			editableRange: vscode.Range
 			quoteChar: string = '"'
 
@@ -164,20 +165,20 @@ export default class JavaScript implements Language {
 			const sourceFileName = _.last(item.originalPath.split(/\\|\//))
 			const matchingImports = await findFilesRoughly(sourceFileName, documentFileInfo.fileExtensionWithoutLeadingDot)
 
-			item.possiblePath = matchingImports.map(fullPath => new FilePath(fullPath, item.originalPath))
+			item.matchingPath = matchingImports.map(fullPath => new FilePath(fullPath, item.originalPath))
 
-			if (item.possiblePath.length > 1) {
+			if (item.matchingPath.length > 1) {
 				// Given originalPath = '../../../abc/xyz.js'
 				// Return originalPathList = ['abc', 'xyz'.js']
 				const originalPathList = item.originalPath.split(/\\|\//).slice(0, -1).filter(pathUnit => pathUnit !== '.' && pathUnit !== '..')
 
 				let count = 0
 				while (++count <= originalPathList.length) {
-					const refinedPath = item.possiblePath.filter(path =>
+					const refinedPath = item.matchingPath.filter(path =>
 						path.fullPath.split(/\\|\//).slice(0, -1).slice(-count).join('|') === originalPathList.slice(-count).join('|')
 					)
 					if (refinedPath.length === 1) {
-						item.possiblePath = refinedPath
+						item.matchingPath = refinedPath
 						break
 					}
 				}
@@ -188,24 +189,24 @@ export default class JavaScript implements Language {
 			return null
 		}
 
-		const unresolvedImports = invalidImports.filter(item => item.possiblePath.length !== 1)
-		const resolvableImports = unresolvedImports.filter(item => item.possiblePath.length > 1)
+		const unresolvedImports = invalidImports.filter(item => item.matchingPath.length !== 1)
+		const resolvableImports = unresolvedImports.filter(item => item.matchingPath.length > 1)
 
 		for (const item of resolvableImports) {
 			const selectedPath = await vscode.window.showQuickPick(
-				item.possiblePath,
+				item.matchingPath,
 				{ placeHolder: item.originalPath }
 			)
 
 			if (!selectedPath) {
-				break
+				return null
 			}
 
 			if (cancellationToken.isCancellationRequested) {
 				return null
 			}
 
-			actions.push(worker => {
+			await editor.edit(worker => {
 				const span = item.editableRange
 				const path = `${item.quoteChar}${selectedPath.label}${item.quoteChar}`
 				worker.replace(span, path)
@@ -226,16 +227,16 @@ export default class JavaScript implements Language {
 		}
 
 		for (const item of invalidImports) {
-			if (item.possiblePath.length === 1) {
-				actions.push(worker => {
+			if (item.matchingPath.length === 1) {
+				await editor.edit(worker => {
 					const span = item.editableRange
-					const path = `${item.quoteChar}${item.possiblePath[0].label}${item.quoteChar}`
+					const path = `${item.quoteChar}${item.matchingPath[0].label}${item.quoteChar}`
 					worker.replace(span, path)
 				})
 			}
 		}
 
-		return actions
+		return true
 	}
 
 	reset() {

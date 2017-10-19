@@ -10,7 +10,7 @@ interface Language {
 	getItems(document: vscode.TextDocument): Promise<Array<vscode.QuickPickItem> | null>
 	addItem?(filePath: string)
 	cutItem?(filePath: string)
-	fixImport(document: vscode.TextDocument, cancellationToken: vscode.CancellationToken): Promise<Array<(worker: vscode.TextEditorEdit) => void> | null>
+	fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken): Promise<boolean | null>
 	reset()
 }
 

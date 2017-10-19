@@ -88,27 +88,17 @@ export function activate(context: vscode.ExtensionContext) {
         })
 
         await vscode.window.withProgress({ title: 'Fixing invalid import/require statements', location: vscode.ProgressLocation.Window }, async () => {
-            let workingDocumentHasBeenFixed = false
-
             for (let lang of languages) {
-                const actions = await lang.fixImport(workingDocument, cancellationEvent.token)
-                if (actions) {
-                    // Stop processing if the active editor has been changed
-                    if (workingEditor !== vscode.window.activeTextEditor) {
-                        return null
-                    }
+                const workingDocumentHasBeenFixed = await lang.fixImport(workingEditor, workingDocument, cancellationEvent.token)
 
-                    await workingEditor.edit(worker => {
-                        actions.forEach(actionDescriptor => actionDescriptor(worker))
-                    })
-
-                    workingDocumentHasBeenFixed = true
+                // Stop processing if it is handled or cancelled
+                if (workingDocumentHasBeenFixed === true || workingDocumentHasBeenFixed === null) {
+                    return null
                 }
             }
 
-            if (workingDocumentHasBeenFixed === false) {
-                vscode.window.showErrorMessage('Code Quicken: The current language was not supported.')
-            }
+            // Show the error message if no languages can fix the imports
+            vscode.window.showErrorMessage('Code Quicken: The current language was not supported.')
         })
 
         editorChangeEvent.dispose()
