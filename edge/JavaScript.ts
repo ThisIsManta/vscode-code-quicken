@@ -78,6 +78,23 @@ export default class JavaScript implements Language {
 		return items
 	}
 
+	addItem(filePath: string) {
+		if (this.fileItemCache) {
+			const fileInfo = new FileInfo(filePath)
+			this.fileItemCache.push(new FileItem(fileInfo, this.baseConfig.javascript))
+		}
+	}
+
+	cutItem(filePath: string) {
+		if (this.fileItemCache) {
+			const fileInfo = new FileInfo(filePath)
+			const index = this.fileItemCache.findIndex(item => item.fileInfo.fullPath === fileInfo.fullPath)
+			if (index >= 0) {
+				this.fileItemCache.splice(index, 1)
+			}
+		}
+	}
+
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
 		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
 			return false

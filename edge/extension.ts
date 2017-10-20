@@ -5,7 +5,6 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 
 import { RootConfigurations, Language, Item } from './global';
-import FileInfo from './FileInfo'
 import LocalStorage from './LocalStorage'
 import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
