@@ -798,23 +798,22 @@ function getImportSnippet(name: string, path: string, useImport: boolean, option
 		path = `"${path}"`
 	}
 
-	let code = ''
+	const lineEnding = (options.removeSemiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
+
 	if (useImport) {
 		if (name) {
-			code = `import ${name} from ${path}`
+			return `import ${name} from ${path}` + lineEnding
 		} else {
-			code = `import ${path}`
+			return `import ${path}` + lineEnding
 		}
 
 	} else {
 		if (name) {
-			code = `const ${name} = require(${path})`
+			return `const ${name} = require(${path})` + lineEnding
 		} else {
-			code = `require(${path})`
+			return `require(${path})`
 		}
 	}
-
-	return code + (options.removeSemiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
 }
 
 function findInCodeTree(source: object, target: object) {
