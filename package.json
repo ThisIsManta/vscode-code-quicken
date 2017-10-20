@@ -50,7 +50,7 @@
                 "codeQuicken.recentSelectionLimit": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 10,
+                    "maximum": 50,
                     "default": 3
                 },
                 "codeQuicken.javascript.preferImports": {
@@ -61,11 +61,11 @@
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.omitFileExtensionFromPath": {
+                "codeQuicken.javascript.omitJSFileExtensionFromPath": {
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.omitIndexFileFromPath": {
+                "codeQuicken.javascript.omitIndexJSFileNameFromPath": {
                     "type": "boolean",
                     "default": false
                 },

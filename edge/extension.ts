@@ -6,20 +6,21 @@ import * as vscode from 'vscode'
 
 import { RootConfigurations, Language, Item } from './global';
 import FileInfo from './FileInfo'
+import LocalStorage from './LocalStorage'
 import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
 
 let languages: Array<Language>
 let fileWatch: vscode.FileSystemWatcher
-let recentSelectedItems: RecentSelectedItems
-const localStoragePath = fp.join(os.tmpdir(), 'vscode.thisismanta.code-quicken.json')
-let localStorage: any
+let localStorage = new LocalStorage()
 
 export function activate(context: vscode.ExtensionContext) {
     let rootConfig: RootConfigurations
 
     function initialize() {
         rootConfig = vscode.workspace.getConfiguration().get<RootConfigurations>('codeQuicken')
+
+        localStorage.load(rootConfig)
 
         if (languages) {
             languages.forEach(lang => lang.reset())
@@ -29,19 +30,6 @@ export function activate(context: vscode.ExtensionContext) {
             // Add new supported languages here
             new JavaScript(rootConfig),
         ]
-
-        recentSelectedItems = new RecentSelectedItems(rootConfig.recentSelectionLimit)
-
-        try {
-            localStorage = JSON.parse(fs.readFileSync(localStoragePath, 'utf-8'))
-
-            recentSelectedItems.fromJSON(_.get(localStorage, 'recentSelectedItems', {}))
-
-        } catch (ex) {
-            console.error(`Could not read ${localStoragePath}.`)
-
-            localStorage = {}
-        }
     }
 
     initialize()
@@ -72,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return null
                 }
 
-                items = recentSelectedItems.sort(lang, items)
+                items = localStorage.recentSelectedItems.sort(lang, items)
 
                 // Show VS Code picker
                 const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' }) as Item
@@ -82,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return null
                 }
 
-                recentSelectedItems.markAsRecentlyUsed(lang, selectedItem)
+                localStorage.recentSelectedItems.markAsRecentlyUsed(lang, selectedItem)
 
                 // Insert the snippet
                 const action = await selectedItem.addImport(workingDocument)
@@ -133,10 +121,5 @@ export function deactivate() {
     languages.forEach(lang => lang.reset())
     fileWatch.dispose()
 
-    try {
-        fs.writeFileSync(localStoragePath, JSON.stringify(localStorage), 'utf-8')
-
-    } catch (ex) {
-        console.error(`Could not write ${localStoragePath}.`)
-    }
+    localStorage.save()
 }

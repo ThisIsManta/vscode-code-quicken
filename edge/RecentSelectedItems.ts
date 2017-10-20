@@ -19,28 +19,15 @@ export default class RecentSelectedItems {
 		}
 
 		const list = this.data.get(language.constructor.name)
-		const hash = list.reduce((hash, id) => {
-			hash[id] = false
+		const hash = list.reduce((hash, id, rank) => {
+			hash[id] = rank
 			return hash
 		}, {})
 
-		const sortedItems = _.sortBy(items, item => {
-			const used = hash[item.id]
-			if (used === undefined) {
-				return Infinity
-
-			} else {
-				if (used === false) {
-					hash[item.id] = true
-				}
-
-				return list.indexOf(item.id)
-			}
+		return _.sortBy(items, item => {
+			const rank = hash[item.id]
+			return rank === undefined ? Infinity : rank
 		})
-
-		// TODO: use `hash` to remove unused items
-
-		return sortedItems
 	}
 
 	markAsRecentlyUsed(language: Language, selectedItem: Item) {
