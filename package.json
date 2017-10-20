@@ -83,9 +83,9 @@
                         "camelCase",
                         "snake_case",
                         "lowercase",
-                        "as-is"
+                        "standard"
                     ],
-                    "default": "as-is"
+                    "default": "standard"
                 },
                 "codeQuicken.javascript.predefinedVariableNames": {
                     "type": "object",
