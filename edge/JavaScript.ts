@@ -33,7 +33,7 @@ export default class JavaScript implements Language {
 			return null
 		}
 
-		let items: Array<vscode.QuickPickItem>
+		let items: Array<Item>
 
 		const documentFileInfo = new FileInfo(document.fileName)
 		const documentIsJavaScript = JAVASCRIPT_FILE_EXTENSION.test(documentFileInfo.fileExtensionWithoutLeadingDot)
@@ -278,6 +278,7 @@ export default class JavaScript implements Language {
 
 class FileItem implements Item {
 	private options: LanguageOptions
+	readonly id: string
 	readonly label: string
 	readonly description: string
 	fileInfo: FileInfo
@@ -285,6 +286,7 @@ class FileItem implements Item {
 	sortableName: string
 
 	constructor(fileInfo: FileInfo, options: LanguageOptions) {
+		this.id = fileInfo.fullPath
 		this.options = options
 		this.fileInfo = fileInfo
 
@@ -613,12 +615,14 @@ class FileItem implements Item {
 
 class NodeItem implements Item {
 	private options: LanguageOptions
+	readonly id: string
 	readonly label: string
 	readonly description: string = ''
 	readonly name: string
 	readonly path: string
 
 	constructor(name: string, options: LanguageOptions) {
+		this.id = 'node://' + name
 		this.label = name
 		this.name = getVariableName(name, options)
 		this.path = name

@@ -9,12 +9,16 @@ import JavaScript from './JavaScript'
 
 let languages: Array<Language>
 let fileWatch: vscode.FileSystemWatcher
+let recentSelectedItems: Map<Language, Array<string>>
 
 export function activate(context: vscode.ExtensionContext) {
     let rootConfig: RootConfigurations
 
     function initialize() {
         rootConfig = vscode.workspace.getConfiguration().get<RootConfigurations>('codeQuicken')
+
+        // TODO: load from temp
+        recentSelectedItems = new Map<Language, Array<string>>()
 
         if (languages) {
             languages.forEach(lang => lang.reset())
@@ -47,11 +51,19 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         for (let lang of languages) {
-            const items = await lang.getItems(workingDocument)
+            let items = await lang.getItems(workingDocument)
             if (items !== null) {
                 // Stop processing if the active editor has been changed
                 if (workingEditor !== vscode.window.activeTextEditor) {
                     return null
+                }
+
+                if (recentSelectedItems.has(lang)) {
+                    const recentSelectedItemIds = recentSelectedItems.get(lang)
+                    items = _.sortBy(items, item => {
+                        const rank = recentSelectedItemIds.indexOf(item.id)
+                        return rank === -1 ? Infinity : rank
+                    })
                 }
 
                 // Show VS Code picker
@@ -60,6 +72,22 @@ export function activate(context: vscode.ExtensionContext) {
                 // Stop processing if the user does not select anything
                 if (!selectedItem) {
                     return null
+                }
+
+                if (selectedItem.id) {
+                    if (recentSelectedItems.has(lang)) {
+                        const recentSelectedItemIds = recentSelectedItems.get(lang)
+                        if (recentSelectedItemIds.indexOf(selectedItem.id) >= 0) {
+                            recentSelectedItemIds.splice(recentSelectedItemIds.indexOf(selectedItem.id), 1)
+                        }
+                        recentSelectedItemIds.unshift(selectedItem.id)
+                        if (recentSelectedItemIds.length > rootConfig.recentSelectionLimit) {
+                            recentSelectedItemIds.pop()
+                        }
+
+                    } else {
+                        recentSelectedItems.set(lang, [selectedItem.id])
+                    }
                 }
 
                 // Insert the snippet
@@ -110,4 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     languages.forEach(lang => lang.reset())
     fileWatch.dispose()
+
+    // TODO: save to temp
+    recentSelectedItems.clear()
 }
