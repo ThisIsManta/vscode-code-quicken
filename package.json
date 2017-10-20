@@ -76,7 +76,7 @@
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.namingConvention": {
+                "codeQuicken.javascript.variableNamingConvention": {
                     "type": "string",
                     "enum": [
                         "camelCase",
@@ -84,9 +84,18 @@
                         "lowercase",
                         "as-is"
                     ],
-                    "default": "camelCase"
+                    "default": "as-is"
                 },
-                "codeQuicken.javascript.predefinedNames": {
+                "codeQuicken.javascript.predefinedVariableNames": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {}
+                },
+                "codeQuicken.javascript.filteredFileNames": {
                     "type": "object",
                     "patternProperties": {
                         ".": {

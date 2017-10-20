@@ -14,8 +14,9 @@ export interface LanguageOptions {
 	removeSemiColons: boolean
 	preferSingleQuotes: boolean
 	groupImports: boolean
-	namingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'as-is'
-	predefinedNames: object
+	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'standard'
+	predefinedVariableNames: object
+	filteredFileNames: object
 }
 
 export default class JavaScript implements Language {
@@ -44,9 +45,14 @@ export default class JavaScript implements Language {
 				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), this.baseConfig.javascript))
 		}
 
+		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileNames)
+			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
+			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
+
 		items = _.chain(this.fileItemCache)
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
 			.reject(item => documentIsJavaScript ? TYPESCRIPT_FILE_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot) : false) // Remove TypeScript files as JavaScript does not recognize them anyway
+			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
 			.uniq() // Remove duplicate files
 			.forEach(item => item.updateSortablePath(documentFileInfo.directoryPath))
 			.sortBy([ // Sort files by their path and name
@@ -344,7 +350,7 @@ class FileItem implements Item {
 		// Otherwise, insert `require("...")`
 		if (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Set default imported variable name and its path
-			let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
+			let name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
 			let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
 			if (this.options.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
@@ -366,13 +372,11 @@ class FileItem implements Item {
 					const exportedVariables = this.getExportedVariablesFromIndexFile()
 
 					let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(directoryPathOfWorkingDocument)
-					if (this.fileInfo.fileNameWithoutExtension !== 'index') {
-						if (this.options.removeIndexFile) {
-							indexFileRelativePath = fp.dirname(indexFileRelativePath)
+					if (this.options.removeIndexFile) {
+						indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-						} else if (this.options.removeFileExtension) {
-							indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
-						}
+					} else if (this.options.removeFileExtension) {
+						indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
 					}
 
 					const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
@@ -759,30 +763,31 @@ function getExistingImports(codeTree: any) {
 }
 
 function getVariableName(name: string, options: LanguageOptions) {
-	const predefinedNames = _.toPairs(options.predefinedNames) as Array<Array<string>>
-	for (let pair of predefinedNames) {
-		if (pair[0].startsWith('/') && pair[0].substring(1).includes('/')) {
-			const regx = new RegExp(pair[0].substring(1, pair[0].length - 1), pair[0].substring(pair[0].lastIndexOf('/') + 1))
-			if (regx.test(name)) {
-				return name.replace(regx, pair[1])
-			}
-
-		} else if (pair[0] === name) {
-			return pair[1]
+	const rules = _.toPairs(options.predefinedVariableNames)
+		.map((pair: Array<string>) => ({
+			inputPattern: new RegExp(pair[0]),
+			output: pair[1],
+		}))
+	for (let rule of rules) {
+		if (rule.inputPattern.test(name)) {
+			return name.replace(rule.inputPattern, rule.output)
 		}
 	}
 
-	if (options.namingConvention === 'camelCase') {
-		return _.camelCase(name) || name
+	// Strip starting digits
+	name = name.replace(/^\d+/, '')
 
-	} else if (options.namingConvention === 'snake_case') {
-		return _.snakeCase(name) || name
+	if (options.variableNamingConvention === 'camelCase') {
+		return _.camelCase(name)
 
-	} else if (options.namingConvention === 'lowercase') {
-		return name.toLowerCase()
+	} else if (options.variableNamingConvention === 'snake_case') {
+		return _.snakeCase(name)
+
+	} else if (options.variableNamingConvention === 'lowercase') {
+		return _.words(name).join('').toLowerCase()
 
 	} else {
-		return name
+		return name.match(/[a-z_$1-9]/gi).join('')
 	}
 }
 
