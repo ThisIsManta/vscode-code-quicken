@@ -383,12 +383,12 @@ class FileItem implements Item {
 					}
 
 					const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
-					const duplicateImportHasImportedEverything = _.isMatch(duplicateImportForIndexFile, IMPORT_EVERYTHING)
+					const duplicateImportHasImportedEverything = _.isMatch(duplicateImportForIndexFile && duplicateImportForIndexFile.node, IMPORT_EVERYTHING)
 
 					// Stop processing if there is `import * as name from "path"`
 					if (exportedVariables.length > 0 && duplicateImportHasImportedEverything) {
 						vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`)
-						// TODO: move focus to the statement
+						focusAt(duplicateImportForIndexFile)
 						return null
 					}
 
@@ -479,7 +479,7 @@ class FileItem implements Item {
 
 					if (duplicateNamedImport) {
 						vscode.window.showInformationMessage(`The module "${originalName}" has been already imported.`)
-						// TODO: move focus to the statement
+						focusAt(duplicateNamedImport.loc)
 						return null
 					}
 
@@ -502,7 +502,7 @@ class FileItem implements Item {
 
 				} else {
 					vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
-					// TODO: move focus to the statement
+					focusAt(duplicateImport)
 					return null
 				}
 			}
@@ -517,7 +517,7 @@ class FileItem implements Item {
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
 				vscode.window.showInformationMessage(`The module "${this.label}" has been already imported.`)
-				// TODO: move focus to the statement
+				focusAt(duplicateImport)
 				return null
 			}
 
@@ -949,4 +949,9 @@ function findRequireRecursively(node: any, results = [], visited = new Set()) {
 	}
 
 	return results
+}
+
+function focusAt(node: { start: { line: number, column: number }, end: { line: number, column: number } }) {
+	const position = new vscode.Position(node.start.line - 1, node.end.column)
+	vscode.window.activeTextEditor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport)
 }
