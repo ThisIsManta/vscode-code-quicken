@@ -1,24 +1,25 @@
 import * as fp from 'path'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as _ from 'lodash'
 import * as vscode from 'vscode'
 
 import { RootConfigurations, Language, Item } from './global';
 import FileInfo from './FileInfo'
+import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
 
 let languages: Array<Language>
 let fileWatch: vscode.FileSystemWatcher
-let recentSelectedItems: Map<Language, Array<string>>
+let recentSelectedItems: RecentSelectedItems
+const localStoragePath = fp.join(os.tmpdir(), 'vscode.thisismanta.code-quicken.json')
+let localStorage: any
 
 export function activate(context: vscode.ExtensionContext) {
     let rootConfig: RootConfigurations
 
     function initialize() {
         rootConfig = vscode.workspace.getConfiguration().get<RootConfigurations>('codeQuicken')
-
-        // TODO: load from temp
-        recentSelectedItems = new Map<Language, Array<string>>()
 
         if (languages) {
             languages.forEach(lang => lang.reset())
@@ -28,6 +29,19 @@ export function activate(context: vscode.ExtensionContext) {
             // Add new supported languages here
             new JavaScript(rootConfig),
         ]
+
+        recentSelectedItems = new RecentSelectedItems(rootConfig.recentSelectionLimit)
+
+        try {
+            localStorage = JSON.parse(fs.readFileSync(localStoragePath, 'utf-8'))
+
+            recentSelectedItems.fromJSON(_.get(localStorage, 'recentSelectedItems', {}))
+
+        } catch (ex) {
+            console.error(`Could not read ${localStoragePath}.`)
+
+            localStorage = {}
+        }
     }
 
     initialize()
@@ -58,13 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return null
                 }
 
-                if (recentSelectedItems.has(lang)) {
-                    const recentSelectedItemIds = recentSelectedItems.get(lang)
-                    items = _.sortBy(items, item => {
-                        const rank = recentSelectedItemIds.indexOf(item.id)
-                        return rank === -1 ? Infinity : rank
-                    })
-                }
+                items = recentSelectedItems.sort(lang, items)
 
                 // Show VS Code picker
                 const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' }) as Item
@@ -74,21 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return null
                 }
 
-                if (selectedItem.id) {
-                    if (recentSelectedItems.has(lang)) {
-                        const recentSelectedItemIds = recentSelectedItems.get(lang)
-                        if (recentSelectedItemIds.indexOf(selectedItem.id) >= 0) {
-                            recentSelectedItemIds.splice(recentSelectedItemIds.indexOf(selectedItem.id), 1)
-                        }
-                        recentSelectedItemIds.unshift(selectedItem.id)
-                        if (recentSelectedItemIds.length > rootConfig.recentSelectionLimit) {
-                            recentSelectedItemIds.pop()
-                        }
-
-                    } else {
-                        recentSelectedItems.set(lang, [selectedItem.id])
-                    }
-                }
+                recentSelectedItems.markAsRecentlyUsed(lang, selectedItem)
 
                 // Insert the snippet
                 const action = await selectedItem.addImport(workingDocument)
@@ -139,6 +133,10 @@ export function deactivate() {
     languages.forEach(lang => lang.reset())
     fileWatch.dispose()
 
-    // TODO: save to temp
-    recentSelectedItems.clear()
+    try {
+        fs.writeFileSync(localStoragePath, JSON.stringify(localStorage), 'utf-8')
+
+    } catch (ex) {
+        console.error(`Could not write ${localStoragePath}.`)
+    }
 }

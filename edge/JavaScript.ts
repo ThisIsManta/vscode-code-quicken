@@ -14,7 +14,7 @@ export interface LanguageOptions {
 	omitIndexFileFromPath: boolean
 	preferSingleQuotes: boolean
 	removeSemiColons: boolean
-	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'standard'
+	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'none'
 	predefinedVariableNames: object
 	filteredFileNames: object
 }
