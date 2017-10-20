@@ -47,24 +47,25 @@
         "configuration": {
             "title": "Code Quicken",
             "properties": {
-                "codeQuicken.rememberLastSelection": {
+                "codeQuicken.recentFileSelection": {
                     "type": "integer",
                     "minimum": 0,
+                    "maximum": 10,
                     "default": 3
                 },
                 "codeQuicken.javascript.preferImports": {
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.removeFileExtension": {
+                "codeQuicken.javascript.groupImports": {
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.removeIndexFile": {
+                "codeQuicken.javascript.omitFileExtensionFromPath": {
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.removeSemiColons": {
+                "codeQuicken.javascript.omitIndexFileFromPath": {
                     "type": "boolean",
                     "default": false
                 },
@@ -72,7 +73,7 @@
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.groupImports": {
+                "codeQuicken.javascript.removeSemiColons": {
                     "type": "boolean",
                     "default": false
                 },

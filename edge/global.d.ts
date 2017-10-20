@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import * as JavaScript from './JavaScript'
 
 interface RootConfigurations {
-	rememberLastSelection: number
+	recentFileSelection: number
 	javascript: JavaScript.LanguageOptions
 }
 

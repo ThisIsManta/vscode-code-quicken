@@ -9,11 +9,11 @@ import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
 	preferImports: boolean
-	removeFileExtension: boolean
-	removeIndexFile: boolean
-	removeSemiColons: boolean
-	preferSingleQuotes: boolean
 	groupImports: boolean
+	omitFileExtensionFromPath: boolean
+	omitIndexFileFromPath: boolean
+	preferSingleQuotes: boolean
+	removeSemiColons: boolean
 	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'standard'
 	predefinedVariableNames: object
 	filteredFileNames: object
@@ -288,9 +288,9 @@ class FileItem implements Item {
 		this.options = options
 		this.fileInfo = fileInfo
 
-		if (this.options.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
+		if (this.options.omitIndexFileFromPath && this.fileInfo.fileNameWithoutExtension === 'index') {
 			this.label = this.fileInfo.directoryName
-		} else if (this.options.removeFileExtension) {
+		} else if (this.options.omitFileExtensionFromPath) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -353,14 +353,14 @@ class FileItem implements Item {
 			let name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
 			let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-			if (this.options.removeIndexFile && this.fileInfo.fileNameWithoutExtension === 'index') {
+			if (this.options.omitIndexFileFromPath && this.fileInfo.fileNameWithoutExtension === 'index') {
 				// Set the imported variable name to the directory name
 				name = getVariableName(this.fileInfo.directoryName, this.options)
 
 				// Remove "/index.js" from the imported path
 				path = fp.dirname(path)
 
-			} else if (this.options.removeFileExtension) {
+			} else if (this.options.omitFileExtensionFromPath) {
 				// Remove file extension from the imported path only if it matches the working document
 				path = path.replace(new RegExp(_.escapeRegExp('\\.' + this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 			}
@@ -372,10 +372,10 @@ class FileItem implements Item {
 					const exportedVariables = this.getExportedVariablesFromIndexFile()
 
 					let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(directoryPathOfWorkingDocument)
-					if (this.options.removeIndexFile) {
+					if (this.options.omitIndexFileFromPath) {
 						indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-					} else if (this.options.removeFileExtension) {
+					} else if (this.options.omitFileExtensionFromPath) {
 						indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
 					}
 
