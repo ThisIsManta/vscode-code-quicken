@@ -51,7 +51,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 50,
-                    "default": 3
+                    "default": 1
                 },
                 "codeQuicken.javascript.preferImports": {
                     "type": "boolean",
