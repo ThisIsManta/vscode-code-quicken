@@ -4,7 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as babylon from 'babylon'
 
-import { RootConfigurations, Language, Item } from './global';
+import { RootConfigurations, Language, Item, getSortablePath } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -53,8 +53,7 @@ export default class JavaScript implements Language {
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
 			.reject(item => documentIsJavaScript ? TYPESCRIPT_FILE_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot) : false) // Remove TypeScript files as JavaScript does not recognize them anyway
 			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
-			.uniq() // Remove duplicate files
-			.forEach(item => item.updateSortablePath(documentFileInfo))
+			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
 			.sortBy([ // Sort files by their path and name
 				item => item.sortablePath,
 				item => item.sortableName,
@@ -325,44 +324,6 @@ class FileItem implements Item {
 			this.sortableName = '!'
 		} else {
 			this.sortableName = this.fileInfo.fileNameWithExtension.toLowerCase()
-		}
-	}
-
-	updateSortablePath(workingDocumentFileInfo: FileInfo) {
-		// Set sorting rank according to the directory path
-		// a = the opening files in VS Code
-		// b = the files that are located in the same directory of the working document
-		// cez = "./dir/file"
-		// fd = "../file"
-		// fez = "../dir/file"
-		// ffd = "../../file"
-		if (vscode.workspace.textDocuments.find(document => document.fileName === this.fileInfo.fullPath) !== undefined) {
-			this.sortablePath = 'a'
-
-		} else if (this.fileInfo.directoryPath === workingDocumentFileInfo.directoryPath) {
-			this.sortablePath = 'b'
-
-			// Set file name similarity level
-			// Make similar file name appear on the top of its directory
-			const wordsOfDocumentName = _.words(workingDocumentFileInfo.fileNameWithExtension)
-			const wordsOfThisFileName = _.words(this.fileInfo.fileNameWithExtension)
-			let index = -1
-			let bound = wordsOfDocumentName.length
-			while (++index < bound) {
-				if (wordsOfDocumentName[index] !== wordsOfThisFileName[index]) {
-					break
-				}
-			}
-			this.sortablePath += _.padStart((bound - index).toString(), bound.toString().length, '0')
-
-		} else {
-			this.sortablePath = this.fileInfo.getRelativePath(workingDocumentFileInfo.directoryPath).split('/').map((chunk, index, array) => {
-				if (chunk === '.') return 'c'
-				else if (chunk === '..') return 'f'
-				else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'd'
-				else if (index === array.length - 1) return 'z'
-				return 'e'
-			}).join('')
 		}
 	}
 

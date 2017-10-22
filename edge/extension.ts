@@ -8,6 +8,7 @@ import { RootConfigurations, Language, Item } from './global';
 import LocalStorage from './LocalStorage'
 import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
+import Stylus from './Stylus'
 
 let languages: Array<Language>
 let fileWatch: vscode.FileSystemWatcher
@@ -28,6 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
         languages = [
             // Add new supported languages here
             new JavaScript(rootConfig),
+            new Stylus(rootConfig),
         ]
     }
 
@@ -98,6 +100,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         await vscode.window.withProgress({ title: 'Fixing invalid import/require statements', location: vscode.ProgressLocation.Window }, async () => {
             for (let lang of languages) {
+                if (lang.fixImport === undefined) {
+                    continue
+                }
+
                 const workingDocumentHasBeenFixed = await lang.fixImport(workingEditor, workingDocument, cancellationEvent.token)
 
                 // Stop processing if it is handled or cancelled

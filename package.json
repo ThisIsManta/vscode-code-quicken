@@ -104,6 +104,26 @@
                         }
                     },
                     "default": {}
+                },
+                "codeQuicken.stylus.preferImports": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.stylus.omitStylusFileExtensionFromPath": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.stylus.omitIndexStylusFileNameFromPath": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.stylus.preferSingleQuotes": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.stylus.removeSemiColons": {
+                    "type": "boolean",
+                    "default": false
                 }
             }
         },
@@ -130,6 +150,7 @@
     },
     "dependencies": {
         "babylon": "^6.18.0",
-        "lodash": "^4.17.4"
+        "lodash": "^4.17.4",
+        "stylus": "^0.54.5"
     }
 }
