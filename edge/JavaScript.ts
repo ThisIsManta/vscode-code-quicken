@@ -42,7 +42,7 @@ export default class JavaScript implements Language {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), this.baseConfig.javascript))
+				.map(fileLink => new FileItem(fileLink.fsPath, this.baseConfig.javascript))
 		}
 
 		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileNames)
@@ -79,8 +79,7 @@ export default class JavaScript implements Language {
 
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
-			const fileInfo = new FileInfo(filePath)
-			this.fileItemCache.push(new FileItem(fileInfo, this.baseConfig.javascript))
+			this.fileItemCache.push(new FileItem(filePath, this.baseConfig.javascript))
 		}
 	}
 
@@ -133,22 +132,12 @@ export default class JavaScript implements Language {
 				const fileInfo = new FileInfo(fullPath)
 				const relaPath = fileInfo.getRelativePath(documentFileInfo.directoryPath)
 				const fileName = fp.basename(relaPath)
-				const fileExtn = fp.extname(relaPath)
+				const fileExtn = fp.extname(relaPath) // With a leading dot
 				const dirxName = _.last(fp.dirname(relaPath).split(/\\|\//))
 
 				const relativePathWithoutDots = _.takeRightWhile(relaPath.split('/'), part => part !== '.' && part !== '..').join('/')
 				const relativePathFromWorkspace = fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep)
 				this.description = _.trim(relativePathFromWorkspace.substring(0, relativePathFromWorkspace.length - relativePathWithoutDots.length), '/')
-
-				if (fileName === ('index.' + documentFileInfo.fileExtensionWithoutLeadingDot) && originalRelativePath.endsWith(dirxName)) {
-					this.label = relaPath.substring(0, relaPath.length - fileName.length - 1)
-
-				} else if (originalRelativePath.endsWith(fileExtn)) {
-					this.label = relaPath
-
-				} else {
-					this.label = relaPath.substring(0, relaPath.length - fileExtn.length)
-				}
 			}
 		}
 
@@ -198,7 +187,8 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					worker.replace(item.editableRange, `${item.quoteChar}${getRelativePath(matchingFullPaths[0])}${item.quoteChar}`)
+					const { path } = new FileItem(matchingFullPaths[0], this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
 			} else {
@@ -214,7 +204,8 @@ export default class JavaScript implements Language {
 				}
 
 				await editor.edit(worker => {
-					worker.replace(item.editableRange, `${item.quoteChar}${getRelativePath(selectedItem.fullPath)}${item.quoteChar}`)
+					const { path } = new FileItem(selectedItem.fullPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 			}
 		}
@@ -265,14 +256,14 @@ class FileItem implements Item {
 	readonly id: string
 	readonly label: string
 	readonly description: string
-	fileInfo: FileInfo
+	readonly fileInfo: FileInfo
 	sortablePath: string
 	sortableName: string
 
-	constructor(fileInfo: FileInfo, options: LanguageOptions) {
-		this.id = fileInfo.fullPath
+	constructor(filePath: string, options: LanguageOptions) {
+		this.fileInfo = new FileInfo(filePath)
+		this.id = this.fileInfo.fullPath
 		this.options = options
-		this.fileInfo = fileInfo
 
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
@@ -295,6 +286,25 @@ class FileItem implements Item {
 		}
 	}
 
+	getNameAndRelativePath(directoryPathOfWorkingDocument: string) {
+		let name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
+		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+
+		if (this.options.omitIndexJSFileNameFromPath && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+			// Set the imported variable name to the directory name
+			name = getVariableName(this.fileInfo.directoryName, this.options)
+
+			// Remove "/index.js" from the imported path
+			path = fp.dirname(path)
+
+		} else if (this.options.omitJSFileExtensionFromPath && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+			// Remove file extension from the imported path only if it matches the working document
+			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
+		}
+
+		return { name, path }
+	}
+
 	async addImport(document: vscode.TextDocument) {
 		const codeTree = JavaScript.parse(document.getText())
 
@@ -312,8 +322,7 @@ class FileItem implements Item {
 		// Otherwise, insert `require("...")`
 		if (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Set default imported variable name and its path
-			let name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
-			let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 
 			if (this.options.omitIndexJSFileNameFromPath && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 				// Set the imported variable name to the directory name
@@ -471,7 +480,7 @@ class FileItem implements Item {
 			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
 		} else if (/^(css|less|sass|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			const path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
@@ -485,7 +494,7 @@ class FileItem implements Item {
 			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
 		} else {
-			const path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			const snippet = getImportSnippet(null, path, false, this.options, document)
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(vscode.window.activeTextEditor.selection.active, snippet)

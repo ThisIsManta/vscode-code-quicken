@@ -175,7 +175,7 @@ class FileItem implements Item {
 	readonly id: string;
 	readonly label: string;
 	readonly description: string;
-	fileInfo: FileInfo
+	readonly fileInfo: FileInfo
 	sortableName: string
 	sortablePath: string
 
