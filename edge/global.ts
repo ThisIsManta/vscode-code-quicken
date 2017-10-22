@@ -1,3 +1,4 @@
+import * as fp from 'path'
 import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import FileInfo from './FileInfo'
@@ -57,4 +58,32 @@ export function getSortablePath(fileInfo: FileInfo, documentFileInfo: FileInfo) 
 			return 'e'
 		}).join('')
 	}
+}
+
+export async function findFilesRoughly(filePath: string, fileExtension?: string) {
+	const fileName = fp.basename(filePath)
+
+	let fileLinks = await vscode.workspace.findFiles('**/' + fileName)
+	if (fileExtension && fileName.endsWith('.' + fileExtension) === false) {
+		fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '.' + fileExtension))
+		fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.' + fileExtension))
+	}
+
+	const matchingPaths = fileLinks.map(item => item.fsPath)
+
+	if (matchingPaths.length > 1) {
+		// Given originalPath = '../../../abc/xyz.js'
+		// Set originalPathList = ['abc', 'xyz.js']
+		const originalPathList = filePath.split(/\\|\//).slice(0, -1).filter(pathUnit => pathUnit !== '.' && pathUnit !== '..')
+
+		let count = 0
+		while (++count <= originalPathList.length) {
+			const refinedPaths = matchingPaths.filter(path => path.split(/\\|\//).slice(0, -1).slice(-count).join('|') === originalPathList.slice(-count).join('|'))
+			if (refinedPaths.length === 1) {
+				return refinedPaths
+			}
+		}
+	}
+
+	return matchingPaths
 }

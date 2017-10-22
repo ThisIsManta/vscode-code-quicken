@@ -98,7 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
 
-        await vscode.window.withProgress({ title: 'Fixing invalid import/require statements', location: vscode.ProgressLocation.Window }, async () => {
+        await vscode.window.withProgress({ title: 'Code Quicken: Fixing invalid import/require statements', location: vscode.ProgressLocation.Window }, async () => {
             for (let lang of languages) {
                 if (lang.fixImport === undefined) {
                     continue
