@@ -8,15 +8,15 @@ import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly }
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
-	preferImports: boolean
-	groupImports: boolean
-	omitJSFileExtensionFromPath: boolean
-	omitIndexJSFileNameFromPath: boolean
-	preferSingleQuotes: boolean
-	removeSemiColons: boolean
-	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'none'
+	syntax: 'import' | 'require'
+	grouping: boolean
+	fileExtension: boolean
+	indexFile: boolean
+	quoteCharacter: 'single' | 'double'
+	semiColons: boolean
 	predefinedVariableNames: object
-	filteredFileNames: object
+	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'none'
+	filteredFileList: object
 }
 
 export default class JavaScript implements Language {
@@ -45,7 +45,7 @@ export default class JavaScript implements Language {
 				.map(fileLink => new FileItem(fileLink.fsPath, this.baseConfig.javascript))
 		}
 
-		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileNames)
+		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileList)
 			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
 			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
 
@@ -268,10 +268,10 @@ class FileItem implements Item {
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
 
-		if (this.options.omitIndexJSFileNameFromPath && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length), fp.sep)
-		} else if (this.options.omitJSFileExtensionFromPath && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+		} else if (this.options.fileExtension && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -290,14 +290,14 @@ class FileItem implements Item {
 		let name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
 		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-		if (this.options.omitIndexJSFileNameFromPath && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
 			name = getVariableName(this.fileInfo.directoryName, this.options)
 
 			// Remove "/index.js" from the imported path
 			path = fp.dirname(path)
 
-		} else if (this.options.omitJSFileExtensionFromPath && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+		} else if (this.options.fileExtension && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
 			// Remove file extension from the imported path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 		}
@@ -324,29 +324,29 @@ class FileItem implements Item {
 			// Set default imported variable name and its path
 			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 
-			if (this.options.omitIndexJSFileNameFromPath && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+			if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 				// Set the imported variable name to the directory name
 				name = getVariableName(this.fileInfo.directoryName, this.options)
 
 				// Remove "/index.js" from the imported path
 				path = fp.dirname(path)
 
-			} else if (this.options.omitJSFileExtensionFromPath && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+			} else if (this.options.fileExtension && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
 				// Remove file extension from the imported path only if it matches the working document
 				path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 			}
 
 			let foundIndexFileAndWentForIt = false
 
-			if (this.options.preferImports) {
+			if (this.options.syntax === 'import') {
 				if (this.hasIndexFile()) {
 					const exportedVariables = this.getExportedVariablesFromIndexFile()
 
 					let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(directoryPathOfWorkingDocument)
-					if (this.options.omitIndexJSFileNameFromPath) {
+					if (this.options.indexFile) {
 						indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-					} else if (this.options.omitJSFileExtensionFromPath) {
+					} else if (this.options.fileExtension) {
 						indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
 					}
 
@@ -427,7 +427,7 @@ class FileItem implements Item {
 			if (duplicateImport) {
 				// Try merging named imports together
 				// Note that we cannot merge with `import * as name from "path"`
-				if (this.options.groupImports && duplicateImport.node.type === 'ImportDeclaration' && name.startsWith('*') === false) {
+				if (this.options.grouping && duplicateImport.node.type === 'ImportDeclaration' && name.startsWith('*') === false) {
 					const originalName = name.startsWith('{')
 						? name.substring(1, name.length - 1).trim() // Remove brackets from `{ name }`
 						: name
@@ -475,7 +475,7 @@ class FileItem implements Item {
 				}
 			}
 
-			const snippet = getImportSnippet(name, path, this.options.preferImports, this.options, document)
+			const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
@@ -489,7 +489,7 @@ class FileItem implements Item {
 				return null
 			}
 
-			const snippet = getImportSnippet(null, path, this.options.preferImports, this.options, document)
+			const snippet = getImportSnippet(null, path, this.options.syntax === 'import', this.options, document)
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
@@ -626,7 +626,7 @@ class NodeItem implements Item {
 			position = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
 		}
 
-		const snippet = getImportSnippet(name, this.path, this.options.preferImports, this.options, document)
+		const snippet = getImportSnippet(name, this.path, this.options.syntax === 'import', this.options, document)
 
 		return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
 	}
@@ -767,13 +767,13 @@ function getVariableName(name: string, options: LanguageOptions) {
 }
 
 function getImportSnippet(name: string, path: string, useImport: boolean, options: LanguageOptions, document: vscode.TextDocument) {
-	if (options.preferSingleQuotes) {
+	if (options.quoteCharacter === 'single') {
 		path = `'${path}'`
 	} else {
 		path = `"${path}"`
 	}
 
-	const lineEnding = (options.removeSemiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
+	const lineEnding = (options.semiColons ? '' : ';') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
 
 	if (useImport) {
 		if (name) {

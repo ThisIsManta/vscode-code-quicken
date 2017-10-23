@@ -6,7 +6,7 @@ import * as JavaScript from './JavaScript'
 import * as Stylus from './Stylus'
 
 export interface RootConfigurations {
-	recentSelectionLimit: number
+	history: number
 	javascript: JavaScript.LanguageOptions
 	stylus: Stylus.LanguageOptions
 }

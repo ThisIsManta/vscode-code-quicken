@@ -1,7 +1,7 @@
 {
     "name": "code-quicken",
     "displayName": "Manta's Code Quicken",
-    "description": "Insert import/require statement quickly.",
+    "description": "Insert import/require statements quickly.",
     "version": "0.0.10",
     "publisher": "thisismanta",
     "categories": [
@@ -47,37 +47,63 @@
         "configuration": {
             "title": "Code Quicken",
             "properties": {
-                "codeQuicken.recentSelectionLimit": {
+                "codeQuicken.history": {
+                    "description": "Set the maximum number of recently selected items when adding an import/require statement.",
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 50,
                     "default": 1
                 },
-                "codeQuicken.javascript.preferImports": {
+                "codeQuicken.javascript.syntax": {
+                    "description": "Insert either ES2015's import or AMD's require syntax.",
+                    "type": "string",
+                    "enum": [
+                        "import",
+                        "require"
+                    ],
+                    "default": "require"
+                },
+                "codeQuicken.javascript.grouping": {
+                    "description": "Allow groupping multiple-imports if and only if \"codeQuicken.javascript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
                     "type": "boolean",
                     "default": false
                 },
-                "codeQuicken.javascript.groupImports": {
+                "codeQuicken.javascript.fileExtension": {
+                    "description": "Insert JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
-                "codeQuicken.javascript.omitJSFileExtensionFromPath": {
+                "codeQuicken.javascript.indexFile": {
+                    "description": "Insert \"index\" file name with JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
-                "codeQuicken.javascript.omitIndexJSFileNameFromPath": {
-                    "type": "boolean",
-                    "default": false
+                "codeQuicken.javascript.quoteCharacter": {
+                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "double"
+                    ],
+                    "default": "double"
                 },
-                "codeQuicken.javascript.preferSingleQuotes": {
+                "codeQuicken.javascript.semiColons": {
+                    "description": "Insert statement-ending semi-colons.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
-                "codeQuicken.javascript.removeSemiColons": {
-                    "type": "boolean",
-                    "default": false
+                "codeQuicken.javascript.predefinedVariableNames": {
+                    "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `const bar_123 = require(\"./foo-123.js\");`",
+                    "type": "object",
+                    "patternProperties": {
+                        ".": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {}
                 },
                 "codeQuicken.javascript.variableNamingConvention": {
+                    "description": "Define variable naming convention. This has no effects on \"codeQuicken.javascript.predefinedVariableNames\"",
                     "type": "string",
                     "enum": [
                         "camelCase",
@@ -87,7 +113,8 @@
                     ],
                     "default": "none"
                 },
-                "codeQuicken.javascript.predefinedVariableNames": {
+                "codeQuicken.javascript.filteredFileList": {
+                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and valus must be written in regular expression. For example, you are working on a file named \"foo.js\", and you want to see only the files ended with \".spec.js\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.js$\": \"\\\\.spec\\\\.js$\" }`",
                     "type": "object",
                     "patternProperties": {
                         ".": {
@@ -96,34 +123,38 @@
                     },
                     "default": {}
                 },
-                "codeQuicken.javascript.filteredFileNames": {
-                    "type": "object",
-                    "patternProperties": {
-                        ".": {
-                            "type": "string"
-                        }
-                    },
-                    "default": {}
+                "codeQuicken.stylus.syntax": {
+                    "description": "Insert either @import or @require. See also http://stylus-lang.com/docs/import.html",
+                    "type": "string",
+                    "enum": [
+                        "@import",
+                        "@require"
+                    ],
+                    "default": "@import"
                 },
-                "codeQuicken.stylus.preferImports": {
+                "codeQuicken.stylus.fileExtension": {
+                    "description": "Insert STYL file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
-                "codeQuicken.stylus.omitStylusFileExtensionFromPath": {
+                "codeQuicken.stylus.indexFile": {
+                    "description": "Insert STYL file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
-                "codeQuicken.stylus.omitIndexStylusFileNameFromPath": {
-                    "type": "boolean",
-                    "default": false
+                "codeQuicken.stylus.quoteCharacter": {
+                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "double"
+                    ],
+                    "default": "double"
                 },
-                "codeQuicken.stylus.preferSingleQuotes": {
+                "codeQuicken.stylus.semiColons": {
+                    "description": "Insert statement-ending semi-colons.",
                     "type": "boolean",
-                    "default": false
-                },
-                "codeQuicken.stylus.removeSemiColons": {
-                    "type": "boolean",
-                    "default": false
+                    "default": true
                 }
             }
         },

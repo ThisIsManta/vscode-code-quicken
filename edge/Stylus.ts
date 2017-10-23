@@ -8,11 +8,11 @@ import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly }
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
-	preferImports: boolean
-	omitStylusFileExtensionFromPath: boolean
-	omitIndexStylusFileNameFromPath: boolean
-	preferSingleQuotes: boolean
-	removeSemiColons: boolean
+	syntax: '@import' | '@require'
+	fileExtension: boolean
+	indexFile: boolean
+	quoteCharacter: 'single' | 'double'
+	semiColons: boolean
 }
 
 export default class Stylus implements Language {
@@ -77,7 +77,7 @@ export default class Stylus implements Language {
 		}
 
 		const existingImports = getExistingImportsAndUrls(codeTree)
-		const brokenNodes: Array<Nodes.String> = []
+		const brokenImports: Array<Nodes.String> = []
 		for (const node of existingImports) {
 			if (cancellationToken.isCancellationRequested) {
 				return null
@@ -92,12 +92,12 @@ export default class Stylus implements Language {
 			}
 
 			if (path && fs.existsSync(path) === false) {
-				brokenNodes.push(path)
+				brokenImports.push(path)
 			}
 		}
 
-		if (brokenNodes.length === 0) {
-			vscode.window.setStatusBarMessage('Code Quicken: No broken @import/@require/url() statements have been found.', 5000)
+		if (brokenImports.length === 0) {
+			vscode.window.setStatusBarMessage('Code Quicken: No broken import/require statements have been found.', 5000)
 			return null
 		}
 
@@ -110,8 +110,8 @@ export default class Stylus implements Language {
 
 		const documentFileInfo = new FileInfo(document.fileName)
 
-		const unsolvableNodes: Array<Nodes.String> = []
-		for (const node of brokenNodes) {
+		const unsolvableImports: Array<Nodes.String> = []
+		for (const node of brokenImports) {
 			if (cancellationToken.isCancellationRequested) {
 				return null
 			}
@@ -119,7 +119,7 @@ export default class Stylus implements Language {
 			const matchingFullPaths = await findFilesRoughly(node.val, 'styl')
 
 			if (matchingFullPaths.length === 0) {
-				unsolvableNodes.push(node)
+				unsolvableImports.push(node)
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
@@ -145,11 +145,11 @@ export default class Stylus implements Language {
 			}
 		}
 
-		if (unsolvableNodes.length === 0) {
+		if (unsolvableImports.length === 0) {
 			vscode.window.setStatusBarMessage('Code Quicken: All broken import/require statements have been fixed.', 5000)
 
 		} else {
-			vscode.window.showWarningMessage(`Code Quicken: There ${unsolvableNodes.length === 1 ? 'was' : 'were'} ${unsolvableNodes.length} broken import/require statement${unsolvableNodes.length === 1 ? '' : 's'} that had not been fixed.`)
+			vscode.window.showWarningMessage(`Code Quicken: There ${unsolvableImports.length === 1 ? 'was' : 'were'} ${unsolvableImports.length} broken import/require statement${unsolvableImports.length === 1 ? '' : 's'} that had not been fixed.`)
 		}
 
 		return true
@@ -186,10 +186,10 @@ class FileItem implements Item {
 
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
 
-		if (this.options.omitIndexStylusFileNameFromPath && this.fileInfo.fileNameWithExtension === 'index.styl') {
+		if (this.options.indexFile && this.fileInfo.fileNameWithExtension === 'index.styl') {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length), fp.sep)
-		} else if (this.options.omitStylusFileExtensionFromPath && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
+		} else if (this.options.fileExtension && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -205,11 +205,11 @@ class FileItem implements Item {
 	getRelativePath(directoryPathOfWorkingDocument: string) {
 		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-		if (this.options.omitIndexStylusFileNameFromPath && this.fileInfo.fileNameWithExtension === 'index.styl') {
+		if (this.options.indexFile && this.fileInfo.fileNameWithExtension === 'index.styl') {
 			path = fp.dirname(path)
 
-		} else if (this.options.omitStylusFileExtensionFromPath && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
-			path = path.replace(/\.styl$/, '')
+		} else if (this.options.fileExtension && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
+			path = path.replace(/\.styl$/i, '')
 		}
 
 		return path
@@ -218,9 +218,9 @@ class FileItem implements Item {
 	async addImport(document: vscode.TextDocument) {
 		const directoryPathOfWorkingDocument = new FileInfo(document.fileName).directoryPath
 
-		const quote = this.options.preferSingleQuotes ? '\'' : '"'
+		const quote = this.options.quoteCharacter === 'single' ? '\'' : '"'
 
-		if (/^(styl|css)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		if (/^(styl|css)$/i.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			const path = this.getRelativePath(directoryPathOfWorkingDocument)
 
 			let position = new vscode.Position(0, 0)
@@ -240,7 +240,7 @@ class FileItem implements Item {
 				}
 			}
 
-			const snippet = `@${this.options.preferImports ? 'import' : 'require'} ${quote}${path}${quote}${this.options.removeSemiColons ? '' : ';'}${document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'}`
+			const snippet = `@${this.options.syntax ? 'import' : 'require'} ${quote}${path}${quote}${this.options.semiColons ? '' : ';'}${document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'}`
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
 

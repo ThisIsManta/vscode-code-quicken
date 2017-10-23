@@ -22,7 +22,7 @@ export default class LocalStorage {
 			}
 		}
 
-		this.recentSelectedItems = new RecentSelectedItems(rootConfig.recentSelectionLimit)
+		this.recentSelectedItems = new RecentSelectedItems(rootConfig.history)
 		this.recentSelectedItems.fromJSON(_.get(json, 'recentSelectedItems', {}))
 	}
 
