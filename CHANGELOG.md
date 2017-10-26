@@ -1,3 +1,6 @@
+### 1.0.0
+- Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus langauges.
+
 ### 0.0.10
 - Fixed the unexpected reading Node-module require statements.
 
