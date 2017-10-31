@@ -616,8 +616,10 @@ class NodeItem implements Item {
 		const codeTree = JavaScript.parse(document.getText())
 
 		const existingImports = getExistingImports(codeTree)
-		if (existingImports.find(item => item.path === this.path)) {
+		const duplicateImport = existingImports.find(item => item.path === this.path)
+		if (duplicateImport) {
 			vscode.window.showInformationMessage(`The module "${this.path}" has been already imported.`)
+			focusAt(duplicateImport)
 			return null
 		}
 
