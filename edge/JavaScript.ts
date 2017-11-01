@@ -432,10 +432,47 @@ class FileItem implements Item {
 			if (duplicateImport) {
 				// Try merging named imports together
 				// Note that we cannot merge with `import * as name from "path"`
-				if (this.options.grouping && duplicateImport.node.type === 'ImportDeclaration' && name.startsWith('*') === false) {
-					const originalName = name.startsWith('{')
-						? name.substring(1, name.length - 1).trim() // Remove brackets from `{ name }`
-						: name
+				if (this.options.grouping && duplicateImport.node.type === 'ImportDeclaration') {
+					let originalName = name
+					if (name.startsWith('{')) {
+						originalName = name.substring(1, name.length - 1).trim() // Remove brackets from `{ name }`
+					} else if (name.startsWith('*')) {
+						originalName = name.substring('* as '.length)
+					}
+
+					const duplicateEverythingImport = duplicateImport.node.specifiers.find(node => node.type === 'ImportNamespaceSpecifier')
+
+					// Stop processing if there is `import * as name from "path"`
+					if (duplicateEverythingImport && (name.startsWith('{') || name.startsWith('*'))) {
+						vscode.window.showInformationMessage(`The module "${path}" has been already imported as "${duplicateEverythingImport.local.name}".`)
+						focusAt(duplicateImport.node.specifiers[0].loc)
+						return null
+					}
+
+					// Replace the existing import with the namespace import
+					if (name.startsWith('*')) {
+						const firstNameNode = _.first(duplicateImport.node.specifiers) as any
+						const lastNameNode = _.last(duplicateImport.node.specifiers) as any
+						let duplicateRange = new vscode.Range(firstNameNode.loc.start.line - 1, firstNameNode.loc.start.column, lastNameNode.loc.end.line - 1, lastNameNode.loc.end.column)
+
+						if (firstNameNode.type === 'ImportSpecifier') {
+							const beforeNameText = document.getText(new vscode.Range(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column, firstNameNode.loc.start.line - 1, firstNameNode.loc.start.column))
+							const openBraceDelta = beforeNameText.length - beforeNameText.lastIndexOf('{')
+							const openBracePosition = document.positionAt(firstNameNode.start - openBraceDelta)
+							duplicateRange = new vscode.Range(openBracePosition, duplicateRange.end)
+						}
+
+						if (lastNameNode.type === 'ImportSpecifier') {
+							const afterNameText = document.getText(new vscode.Range(lastNameNode.loc.end.line - 1, lastNameNode.loc.end.column, duplicateImport.node.loc.end.line - 1, duplicateImport.node.loc.end.column))
+							const closeBraceDelta = afterNameText.indexOf('}') + 1
+							const closeBracePosition = document.positionAt(lastNameNode.end + closeBraceDelta)
+							duplicateRange = new vscode.Range(duplicateRange.start, closeBracePosition)
+						}
+
+						// TODO: Add the namespace before the already-imported members
+
+						return (worker: vscode.TextEditorEdit) => worker.replace(duplicateRange, name)
+					}
 
 					let duplicateNamedImport = null
 					const importedVariables = duplicateImport.node.specifiers as Array<any>
