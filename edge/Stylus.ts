@@ -186,10 +186,10 @@ class FileItem implements Item {
 
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
 
-		if (this.options.indexFile && this.fileInfo.fileNameWithExtension === 'index.styl') {
+		if (this.options.indexFile === false && this.fileInfo.fileNameWithExtension === 'index.styl') {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length), fp.sep)
-		} else if (this.options.fileExtension && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
+		} else if (this.options.fileExtension === false && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -205,10 +205,10 @@ class FileItem implements Item {
 	getRelativePath(directoryPathOfWorkingDocument: string) {
 		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-		if (this.options.indexFile && this.fileInfo.fileNameWithExtension === 'index.styl') {
+		if (this.options.indexFile === false && this.fileInfo.fileNameWithExtension === 'index.styl') {
 			path = fp.dirname(path)
 
-		} else if (this.options.fileExtension && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
+		} else if (this.options.fileExtension === false && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
 			path = path.replace(/\.styl$/i, '')
 		}
 
@@ -240,7 +240,7 @@ class FileItem implements Item {
 				}
 			}
 
-			const snippet = `@${this.options.syntax ? 'import' : 'require'} ${quote}${path}${quote}${this.options.semiColons ? '' : ';'}${document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'}`
+			const snippet = `@${this.options.syntax ? 'import' : 'require'} ${quote}${path}${quote}${this.options.semiColons ? ';' : ''}${document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'}`
 
 			return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
 
