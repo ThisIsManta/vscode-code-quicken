@@ -1,3 +1,7 @@
+### 1.0.1
+- Fixed the settings of `codeQuicken.javascript.fileExtension`, `codeQuicken.javascript.indexFile`, and `codeQuicken.javascript.semiColons`.
+- Fixed the issue of `import * as * from "...";`.
+
 ### 1.0.0
 - Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus langauges.
 
