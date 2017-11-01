@@ -1,6 +1,8 @@
 ### 1.0.1
-- Fixed the issue of `import * as * from "...";` in JavaScript.
+- Fixed the issue of writing `import * as * from "...";` in JavaScript.
 - Fixed the settings of `codeQuicken.javascript.fileExtension`, `codeQuicken.javascript.indexFile`, `codeQuicken.javascript.semiColons`, `codeQuicken.stylus.fileExtension`, `codeQuicken.stylus.indexFile`, and `codeQuicken.stylus.semiColons`.
+- Amended ability to detect duplicate imports in JavaScript.
+- Amended ability to replace named imports with namespace import in JavaScript.
 
 ### 1.0.0
 - Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus langauges.
