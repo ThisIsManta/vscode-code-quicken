@@ -107,6 +107,7 @@
                     "type": "string",
                     "enum": [
                         "camelCase",
+                        "PascalCase",
                         "snake_case",
                         "lowercase",
                         "none"

@@ -1,3 +1,6 @@
+### 1.1.0
+- Added `"PascalCase"` option to the setting `codeQuicken.javascript.variableNamingConvention`.
+
 ### 1.0.1
 - Fixed the issue of writing `import * as * from "...";` in JavaScript.
 - Fixed the settings of `codeQuicken.javascript.fileExtension`, `codeQuicken.javascript.indexFile`, `codeQuicken.javascript.semiColons`, `codeQuicken.stylus.fileExtension`, `codeQuicken.stylus.indexFile`, and `codeQuicken.stylus.semiColons`.

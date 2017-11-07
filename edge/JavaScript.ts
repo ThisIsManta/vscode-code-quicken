@@ -15,7 +15,7 @@ export interface LanguageOptions {
 	quoteCharacter: 'single' | 'double'
 	semiColons: boolean
 	predefinedVariableNames: object
-	variableNamingConvention: 'camelCase' | 'snake_case' | 'lowercase' | 'none'
+	variableNamingConvention: 'camelCase' | 'PascalCase' | 'snake_case' | 'lowercase' | 'none'
 	filteredFileList: object
 }
 
@@ -287,8 +287,8 @@ class FileItem implements Item {
 	}
 
 	getNameAndRelativePath(directoryPathOfWorkingDocument: string) {
-		let name: string
-		let path: string = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
+		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
 		if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
@@ -298,13 +298,8 @@ class FileItem implements Item {
 			path = fp.dirname(path)
 
 		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
-			name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
-
 			// Remove file extension from the imported path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
-
-		} else {
-			name = getVariableName(this.fileInfo.fileNameWithExtension, this.options)
 		}
 
 		return { name, path }
@@ -798,6 +793,9 @@ function getVariableName(name: string, options: LanguageOptions) {
 
 	if (options.variableNamingConvention === 'camelCase') {
 		return _.camelCase(name)
+
+	} else if (options.variableNamingConvention === 'PascalCase') {
+		return _.words(name).map(_.upperFirst).join('')
 
 	} else if (options.variableNamingConvention === 'snake_case') {
 		return _.snakeCase(name)
