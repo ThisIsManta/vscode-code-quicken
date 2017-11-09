@@ -29,12 +29,13 @@ export default class Stylus implements Language {
 		}
 
 		const documentFileInfo = new FileInfo(document.fileName)
+		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.{styl,css,jpg,jpeg,png,gif,svg,otf,ttf,woff,woff2,eot}')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), this.baseConfig.stylus))
+				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.baseConfig.stylus))
 		}
 
 		const items = _.chain(this.fileItemCache)
@@ -52,7 +53,8 @@ export default class Stylus implements Language {
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
 			const fileInfo = new FileInfo(filePath)
-			this.fileItemCache.push(new FileItem(fileInfo, this.baseConfig.stylus))
+			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
+			this.fileItemCache.push(new FileItem(fileInfo, rootPath, this.baseConfig.stylus))
 		}
 	}
 
@@ -75,6 +77,8 @@ export default class Stylus implements Language {
 		if (!codeTree) {
 			return false
 		}
+
+		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		const existingImports = getExistingImportsAndUrls(codeTree)
 		const brokenImports: Array<Nodes.String> = []
@@ -123,12 +127,12 @@ export default class Stylus implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const item = new FileItem(new FileInfo(matchingFullPaths[0]), this.baseConfig.stylus)
+					const item = new FileItem(new FileInfo(matchingFullPaths[0]), rootPath, this.baseConfig.stylus)
 					worker.replace(getEditableRange(node), item.getRelativePath(documentFileInfo.directoryPath))
 				})
 
 			} else {
-				const candidateItems = matchingFullPaths.map(path => new FileItem(new FileInfo(path), this.baseConfig.stylus))
+				const candidateItems = matchingFullPaths.map(path => new FileItem(new FileInfo(path), rootPath, this.baseConfig.stylus))
 				const selectedItem = await vscode.window.showQuickPick(candidateItems, { placeHolder: node.val })
 
 				if (!selectedItem) {
@@ -179,16 +183,16 @@ class FileItem implements Item {
 	sortableName: string
 	sortablePath: string
 
-	constructor(fileInfo: FileInfo, options: LanguageOptions) {
+	constructor(fileInfo: FileInfo, rootPath: string, options: LanguageOptions) {
 		this.id = fileInfo.fullPathForPOSIX
 		this.options = options
 		this.fileInfo = fileInfo
 
-		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
+		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
 		if (this.options.indexFile === false && this.fileInfo.fileNameWithExtension === 'index.styl') {
 			this.label = this.fileInfo.directoryName
-			this.description = _.trim(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length), fp.sep)
+			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.options.fileExtension === false && this.fileInfo.fileExtensionWithoutLeadingDot === 'styl') {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {

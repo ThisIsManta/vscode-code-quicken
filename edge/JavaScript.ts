@@ -37,12 +37,13 @@ export default class JavaScript implements Language {
 
 		const documentFileInfo = new FileInfo(document.fileName)
 		const documentIsJavaScript = JAVASCRIPT_FILE_EXTENSION.test(documentFileInfo.fileExtensionWithoutLeadingDot)
+		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(fileLink.fsPath, this.baseConfig.javascript))
+				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.baseConfig.javascript))
 		}
 
 		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileList)
@@ -60,14 +61,14 @@ export default class JavaScript implements Language {
 			])
 			.value()
 
-		const packageJsonPath = fp.join(vscode.workspace.rootPath, 'package.json')
+		const packageJsonPath = fp.join(rootPath, 'package.json')
 		if (!this.nodeItemCache && fs.existsSync(packageJsonPath)) {
 			const packageJson = require(packageJsonPath)
 
 			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
 				.flatten<string>()
-				.map(name => new NodeItem(name, this.baseConfig.javascript))
+				.map(name => new NodeItem(name, rootPath, this.baseConfig.javascript))
 				.sortBy(item => item.name)
 				.value()
 		}
@@ -79,7 +80,8 @@ export default class JavaScript implements Language {
 
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
-			this.fileItemCache.push(new FileItem(filePath, this.baseConfig.javascript))
+			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
+			this.fileItemCache.push(new FileItem(filePath, rootPath, this.baseConfig.javascript))
 		}
 	}
 
@@ -101,6 +103,7 @@ export default class JavaScript implements Language {
 		const actions: Array<(worker: vscode.TextEditorEdit) => void> = []
 
 		const documentFileInfo = new FileInfo(document.fileName)
+		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		class ImportStatementForFixingImport {
 			originalRelativePath: string
@@ -136,7 +139,7 @@ export default class JavaScript implements Language {
 				const dirxName = _.last(fp.dirname(relaPath).split(/\\|\//))
 
 				const relativePathWithoutDots = _.takeRightWhile(relaPath.split('/'), part => part !== '.' && part !== '..').join('/')
-				const relativePathFromWorkspace = fullPath.substring(vscode.workspace.rootPath.length).replace(/\\/g, fp.posix.sep)
+				const relativePathFromWorkspace = fullPath.substring(rootPath.length).replace(/\\/g, fp.posix.sep)
 				this.description = _.trim(relativePathFromWorkspace.substring(0, relativePathFromWorkspace.length - relativePathWithoutDots.length), '/')
 			}
 		}
@@ -187,7 +190,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -204,7 +207,7 @@ export default class JavaScript implements Language {
 				}
 
 				await editor.edit(worker => {
-					const { path } = new FileItem(selectedItem.fullPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(selectedItem.fullPath, rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 			}
@@ -260,17 +263,17 @@ class FileItem implements Item {
 	sortablePath: string
 	sortableName: string
 
-	constructor(filePath: string, options: LanguageOptions) {
+	constructor(filePath: string, rootPath: string, options: LanguageOptions) {
 		this.fileInfo = new FileInfo(filePath)
 		this.id = this.fileInfo.fullPath
 		this.options = options
 
 		// Set containing directory of the given file
-		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length)), fp.sep)
+		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
 		if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
-			this.description = _.trim(this.fileInfo.fullPath.substring(vscode.workspace.rootPath.length), fp.sep)
+			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
@@ -627,7 +630,7 @@ class NodeItem implements Item {
 	readonly name: string
 	readonly path: string
 
-	constructor(name: string, options: LanguageOptions) {
+	constructor(name: string, rootPath: string, options: LanguageOptions) {
 		this.id = 'node://' + name
 		this.label = name
 		this.name = getVariableName(name, options)
@@ -637,7 +640,7 @@ class NodeItem implements Item {
 
 		// Set version of the module as the description
 		try {
-			const packageJson = require(fp.join(vscode.workspace.rootPath, 'node_modules', name, 'package.json'))
+			const packageJson = require(fp.join(rootPath, 'node_modules', name, 'package.json'))
 			if (packageJson.version) {
 				this.description = 'v' + packageJson.version
 			}

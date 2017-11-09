@@ -49,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
         const workingDocument = workingEditor && workingEditor.document
 
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
-        if (vscode.workspace.rootPath === undefined || workingEditor === undefined || workingDocument.isUntitled) {
+        if (workingEditor === undefined || workingDocument.isUntitled || vscode.workspace.getWorkspaceFolder(workingDocument.uri) === undefined) {
             return null
         }
 
