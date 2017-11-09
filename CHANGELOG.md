@@ -1,3 +1,6 @@
+### 1.1.1
+- Added support of **Visual Studio Code** 1.18.0.
+
 ### 1.1.0
 - Added `"PascalCase"` option to the setting `codeQuicken.javascript.variableNamingConvention`.
 
