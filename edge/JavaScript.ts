@@ -337,10 +337,12 @@ class FileItem implements Item {
 		if (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Set default imported variable name and its path
 			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
+			let iden = name
 
 			if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 				// Set the imported variable name to the directory name
 				name = getVariableName(this.fileInfo.directoryName, this.options)
+				iden = name
 
 				// Remove "/index.js" from the imported path
 				path = fp.dirname(path)
@@ -376,8 +378,8 @@ class FileItem implements Item {
 
 					if (exportedVariables.length === 1) {
 						// Set `import { name } from "path/index.js"` when the index file exports only one
-						name = exportedVariables[0]
-						name = `{ ${name} }`
+						iden = exportedVariables[0]
+						name = `{ ${iden} }`
 
 						path = indexFileRelativePath
 
@@ -392,9 +394,10 @@ class FileItem implements Item {
 						}
 
 						if (selectedName === '*') {
-							name = '* as ' + name
+							name = '* as ' + iden
 						} else {
-							name = `{ ${selectedName} }`
+							iden = selectedName
+							name = '{ ' + iden + ' }'
 						}
 
 						path = indexFileRelativePath
@@ -417,7 +420,7 @@ class FileItem implements Item {
 						const exportedVariables = getExportedVariables(this.fileInfo.fullPath)
 						if (exportedVariables.length === 0) {
 							// Set `import * as name from "path"` when the file does not export anything
-							name = '* as ' + name
+							name = '* as ' + iden
 
 						} else {
 							// Let the user choose between `import * as name from "path"` or `import { name } from "path"`
@@ -428,9 +431,10 @@ class FileItem implements Item {
 							}
 
 							if (selectedName === '*') {
-								name = '* as ' + name
+								name = '* as ' + iden
 							} else {
-								name = `{ ${selectedName} }`
+								iden = selectedName
+								name = '{ ' + iden + ' }'
 							}
 						}
 					}
@@ -442,13 +446,6 @@ class FileItem implements Item {
 				// Try merging named imports together
 				// Note that we cannot merge with `import * as name from "path"`
 				if (this.options.grouping && duplicateImport.node.type === 'ImportDeclaration') {
-					let originalName = name
-					if (name.startsWith('{')) {
-						originalName = name.substring(1, name.length - 1).trim() // Remove brackets from `{ name }`
-					} else if (name.startsWith('*')) {
-						originalName = name.substring('* as '.length)
-					}
-
 					const duplicateEverythingImport = duplicateImport.node.specifiers.find(node => node.type === 'ImportNamespaceSpecifier')
 
 					// Stop processing if there is `import * as name from "path"`
@@ -481,6 +478,7 @@ class FileItem implements Item {
 						// TODO: Add the namespace before the already-imported members
 
 						await editor.edit(worker => worker.replace(duplicateRange, name))
+						await JavaScript.fixESLint()
 						return null
 					}
 
@@ -491,14 +489,14 @@ class FileItem implements Item {
 							duplicateNamedImport = node
 							break
 
-						} else if (node.type === 'ImportSpecifier' && node.imported.name === originalName) { // In case of `import { name } from "path"`
+						} else if (node.type === 'ImportSpecifier' && node.imported.name === iden) { // In case of `import { name } from "path"`
 							duplicateNamedImport = node
 							break
 						}
 					}
 
 					if (duplicateNamedImport) {
-						vscode.window.showInformationMessage(`The module "${originalName}" has been already imported.`)
+						vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
 						focusAt(duplicateNamedImport.loc)
 						return null
 					}
@@ -507,17 +505,23 @@ class FileItem implements Item {
 						const lastNamedImport = _.findLast(importedVariables, node => node.type === 'ImportSpecifier')
 						if (lastNamedImport) {
 							const afterLastName = new vscode.Position(lastNamedImport.loc.end.line - 1, lastNamedImport.loc.end.column)
-							await editor.edit(worker => worker.insert(afterLastName, ', ' + originalName))
+							await editor.edit(worker => worker.insert(afterLastName, ', ' + iden))
+							await JavaScript.fixESLint()
+							return null
 
 						} else {
 							const lastAnyImport = _.last(importedVariables)
 							const afterLastName = new vscode.Position(lastAnyImport.loc.end.line - 1, lastAnyImport.loc.end.column)
 							await editor.edit(worker => worker.insert(afterLastName, ', ' + name))
+							await JavaScript.fixESLint()
+							return null
 						}
 
 					} else { // In case of `import name from "path"`
 						const beforeFirstName = new vscode.Position(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column + ('import '.length))
 						await editor.edit(worker => worker.insert(beforeFirstName, name + ', '))
+						await JavaScript.fixESLint()
+						return null
 					}
 
 				} else {
@@ -525,11 +529,28 @@ class FileItem implements Item {
 					focusAt(duplicateImport)
 					return null
 				}
-
-			} else {
-				const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
-				await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			}
+
+			const existingVariableHash = _.chain(existingImports)
+				.filter(item => item.node.type === 'ImportDeclaration')
+				.map(item => item.node.specifiers.map(spec => [_.get(spec, 'local.name', ''), item]))
+				.flatten()
+				.reject(pair => pair[0] === '')
+				.fromPairs()
+				.value()
+			const duplicateVariable = existingVariableHash[iden] as ImportStatementForReadOnly
+			if (duplicateVariable) {
+				const options = [{ title: 'Replace It' }, { title: 'Keep Both', isCloseAffordance: true }] as Array<vscode.MessageItem>
+				const selectedOption = await vscode.window.showWarningMessage(`Do you want to replace the existing "${iden}"?`, { modal: true }, ...options)
+				if (selectedOption === options[0]) {
+					await editor.edit(worker => worker.delete(new vscode.Range(duplicateVariable.start.line - 1, duplicateVariable.start.column, duplicateVariable.end.line - 1, duplicateVariable.end.column)))
+				}
+			}
+
+			const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
+			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
+			await JavaScript.fixESLint()
+			return null
 
 		} else if (/^(css|less|sass|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
@@ -543,14 +564,16 @@ class FileItem implements Item {
 
 			const snippet = getImportSnippet(null, path, this.options.syntax === 'import', this.options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
+			await JavaScript.fixESLint()
+			return null
 
 		} else {
 			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			const snippet = getImportSnippet(null, path, false, this.options, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
+			await JavaScript.fixESLint()
+			return null
 		}
-
-		await JavaScript.fixESLint()
 	}
 
 	private getIndexPath() {

@@ -1,5 +1,7 @@
 ### 1.2.0
 - Fixed missing file path when fixing an import/require statement.
+- Added ability to run ["eslint.executeAutofix"](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) command.
+- Added ability to replace the existing variable.
 
 ### 1.1.1
 - Added support of **Visual Studio Code** 1.18.0.
