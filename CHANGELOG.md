@@ -1,5 +1,6 @@
 ### 1.2.0
 - Fixed missing file path when fixing an import/require statement.
+- Fixed wrong index file path.
 - Added ability to run ["eslint.executeAutofix"](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) command.
 - Added ability to replace the existing variable.
 

@@ -339,19 +339,6 @@ class FileItem implements Item {
 			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			let iden = name
 
-			if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
-				// Set the imported variable name to the directory name
-				name = getVariableName(this.fileInfo.directoryName, this.options)
-				iden = name
-
-				// Remove "/index.js" from the imported path
-				path = fp.dirname(path)
-
-			} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
-				// Remove file extension from the imported path only if it matches the working document
-				path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
-			}
-
 			let foundIndexFileAndWentForIt = false
 
 			if (this.options.syntax === 'import') {
