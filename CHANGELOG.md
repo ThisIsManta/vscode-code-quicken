@@ -1,3 +1,6 @@
+### 1.2.0
+- Fixed missing file path when fixing an import/require statement.
+
 ### 1.1.1
 - Added support of **Visual Studio Code** 1.18.0.
 
@@ -11,7 +14,7 @@
 - Amended ability to replace named imports with namespace import in JavaScript.
 
 ### 1.0.0
-- Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus langauges.
+- Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus languages.
 
 ### 0.0.10
 - Fixed the unexpected reading Node-module require statements.

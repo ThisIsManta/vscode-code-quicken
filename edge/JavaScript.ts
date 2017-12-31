@@ -108,6 +108,7 @@ export default class JavaScript implements Language {
 		class ImportStatementForFixingImport {
 			originalRelativePath: string
 			editableRange: vscode.Range
+			private matchingFullPaths: Array<string>
 
 			constructor(path: string, loc: { start: { line: number, column: number }, end: { line: number, column: number } }) {
 				this.originalRelativePath = path
@@ -122,6 +123,13 @@ export default class JavaScript implements Language {
 					return '"'
 				}
 			}
+
+			async search() {
+				if (this.matchingFullPaths === undefined) {
+					this.matchingFullPaths = await findFilesRoughly(this.originalRelativePath, documentFileInfo.fileExtensionWithoutLeadingDot)
+				}
+				return this.matchingFullPaths
+			}
 		}
 
 		class FileItemForFixingImport implements vscode.QuickPickItem {
@@ -131,16 +139,7 @@ export default class JavaScript implements Language {
 
 			constructor(fullPath: string, originalRelativePath: string) {
 				this.fullPath = fullPath
-
-				const fileInfo = new FileInfo(fullPath)
-				const relaPath = fileInfo.getRelativePath(documentFileInfo.directoryPath)
-				const fileName = fp.basename(relaPath)
-				const fileExtn = fp.extname(relaPath) // With a leading dot
-				const dirxName = _.last(fp.dirname(relaPath).split(/\\|\//))
-
-				const relativePathWithoutDots = _.takeRightWhile(relaPath.split('/'), part => part !== '.' && part !== '..').join('/')
-				const relativePathFromWorkspace = fullPath.substring(rootPath.length).replace(/\\/g, fp.posix.sep)
-				this.description = _.trim(relativePathFromWorkspace.substring(0, relativePathFromWorkspace.length - relativePathWithoutDots.length), '/')
+				this.label = fullPath.substring(rootPath.length).replace(/\\/g, '/')
 			}
 		}
 
@@ -173,20 +172,16 @@ export default class JavaScript implements Language {
 			return null
 		}
 
-		function getRelativePath(fullPath: string) {
-			return new FileInfo(fullPath).getRelativePath(documentFileInfo.directoryPath)
-		}
-
-		const unresolvableImports: Array<ImportStatementForFixingImport> = []
+		const nonResolvableImports: Array<ImportStatementForFixingImport> = []
+		const manualSolvableImports: Array<ImportStatementForFixingImport> = []
 		for (const item of brokenImports) {
 			if (cancellationToken.isCancellationRequested) {
 				return null
 			}
 
-			const matchingFullPaths = await findFilesRoughly(item.originalRelativePath, documentFileInfo.fileExtensionWithoutLeadingDot)
-
+			const matchingFullPaths = await item.search()
 			if (matchingFullPaths.length === 0) {
-				unresolvableImports.push(item)
+				nonResolvableImports.push(item)
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
@@ -195,29 +190,34 @@ export default class JavaScript implements Language {
 				})
 
 			} else {
-				const candidateItems = matchingFullPaths.map(path => new FileItemForFixingImport(path, item.originalRelativePath))
-				const selectedItem = await vscode.window.showQuickPick(candidateItems, { placeHolder: item.originalRelativePath })
-
-				if (!selectedItem) {
-					return null
-				}
-
-				if (cancellationToken.isCancellationRequested) {
-					return null
-				}
-
-				await editor.edit(worker => {
-					const { path } = new FileItem(selectedItem.fullPath, rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
-					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
-				})
+				manualSolvableImports.push(item)
 			}
 		}
 
-		if (unresolvableImports.length === 0) {
+		for (const item of manualSolvableImports) {
+			const matchingFullPaths = await item.search()
+
+			const candidateItems = matchingFullPaths.map(path => new FileItemForFixingImport(path, item.originalRelativePath))
+			const selectedItem = await vscode.window.showQuickPick(candidateItems, { placeHolder: item.originalRelativePath, ignoreFocusOut: true })
+			if (!selectedItem) {
+				return null
+			}
+
+			if (cancellationToken.isCancellationRequested) {
+				return null
+			}
+
+			await editor.edit(worker => {
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
+			})
+		}
+
+		if (nonResolvableImports.length === 0) {
 			vscode.window.setStatusBarMessage('Code Quicken: All broken import/require statements have been fixed.', 5000)
 
 		} else {
-			vscode.window.showWarningMessage(`Code Quicken: There ${unresolvableImports.length === 1 ? 'was' : 'were'} ${unresolvableImports.length} broken import/require statement${unresolvableImports.length === 1 ? '' : 's'} that had not been fixed.`)
+			vscode.window.showWarningMessage(`Code Quicken: There ${nonResolvableImports.length === 1 ? 'was' : 'were'} ${nonResolvableImports.length} broken import/require statement${nonResolvableImports.length === 1 ? '' : 's'} that had not been fixed.`)
 		}
 
 		return true
