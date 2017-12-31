@@ -21,7 +21,7 @@ export interface Language {
 
 export interface Item extends vscode.QuickPickItem {
 	id: string
-	addImport(document: vscode.TextDocument): Promise<(worker: vscode.TextEditorEdit) => void | null | undefined>
+	addImport(editor: vscode.TextEditor): Promise<null | undefined>
 }
 
 export function getSortablePath(fileInfo: FileInfo, documentFileInfo: FileInfo) {

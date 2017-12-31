@@ -219,7 +219,9 @@ class FileItem implements Item {
 		return path
 	}
 
-	async addImport(document: vscode.TextDocument) {
+	async addImport(editor: vscode.TextEditor) {
+		const document = editor.document
+
 		const directoryPathOfWorkingDocument = new FileInfo(document.fileName).directoryPath
 
 		const quote = this.options.quoteCharacter === 'single' ? '\'' : '"'
@@ -246,7 +248,7 @@ class FileItem implements Item {
 
 			const snippet = `@${this.options.syntax ? 'import' : 'require'} ${quote}${path}${quote}${this.options.semiColons ? ';' : ''}${document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'}`
 
-			return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
+			await editor.edit(worker => worker.insert(position, snippet))
 
 		} else {
 			const path = this.getRelativePath(directoryPathOfWorkingDocument)
@@ -258,7 +260,7 @@ class FileItem implements Item {
 				snippet = ' ' + snippet
 			}
 
-			return (worker: vscode.TextEditorEdit) => worker.insert(vscode.window.activeTextEditor.selection.active, snippet)
+			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 		}
 	}
 }

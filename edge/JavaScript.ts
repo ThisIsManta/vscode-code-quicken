@@ -213,6 +213,8 @@ export default class JavaScript implements Language {
 			})
 		}
 
+		await JavaScript.fixESLint()
+
 		if (nonResolvableImports.length === 0) {
 			vscode.window.setStatusBarMessage('Code Quicken: All broken import/require statements have been fixed.', 5000)
 
@@ -221,6 +223,13 @@ export default class JavaScript implements Language {
 		}
 
 		return true
+	}
+
+	static async fixESLint() {
+		const commands = await vscode.commands.getCommands()
+		if (commands.indexOf('eslint.executeAutofix') >= 0) {
+			await vscode.commands.executeCommand('eslint.executeAutofix')
+		}
 	}
 
 	reset() {
@@ -308,7 +317,9 @@ class FileItem implements Item {
 		return { name, path }
 	}
 
-	async addImport(document: vscode.TextDocument) {
+	async addImport(editor: vscode.TextEditor) {
+		const document = editor.document
+
 		const codeTree = JavaScript.parse(document.getText())
 
 		const existingImports = getExistingImports(codeTree)
@@ -469,7 +480,8 @@ class FileItem implements Item {
 
 						// TODO: Add the namespace before the already-imported members
 
-						return (worker: vscode.TextEditorEdit) => worker.replace(duplicateRange, name)
+						await editor.edit(worker => worker.replace(duplicateRange, name))
+						return null
 					}
 
 					let duplicateNamedImport = null
@@ -495,17 +507,17 @@ class FileItem implements Item {
 						const lastNamedImport = _.findLast(importedVariables, node => node.type === 'ImportSpecifier')
 						if (lastNamedImport) {
 							const afterLastName = new vscode.Position(lastNamedImport.loc.end.line - 1, lastNamedImport.loc.end.column)
-							return (worker: vscode.TextEditorEdit) => worker.insert(afterLastName, ', ' + originalName)
+							await editor.edit(worker => worker.insert(afterLastName, ', ' + originalName))
 
 						} else {
 							const lastAnyImport = _.last(importedVariables)
 							const afterLastName = new vscode.Position(lastAnyImport.loc.end.line - 1, lastAnyImport.loc.end.column)
-							return (worker: vscode.TextEditorEdit) => worker.insert(afterLastName, ', ' + name)
+							await editor.edit(worker => worker.insert(afterLastName, ', ' + name))
 						}
 
 					} else { // In case of `import name from "path"`
 						const beforeFirstName = new vscode.Position(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column + ('import '.length))
-						return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstName, name + ', ')
+						await editor.edit(worker => worker.insert(beforeFirstName, name + ', '))
 					}
 
 				} else {
@@ -513,11 +525,11 @@ class FileItem implements Item {
 					focusAt(duplicateImport)
 					return null
 				}
+
+			} else {
+				const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
+				await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			}
-
-			const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
-
-			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
 
 		} else if (/^(css|less|sass|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
@@ -530,15 +542,15 @@ class FileItem implements Item {
 			}
 
 			const snippet = getImportSnippet(null, path, this.options.syntax === 'import', this.options, document)
-
-			return (worker: vscode.TextEditorEdit) => worker.insert(beforeFirstImport, snippet)
+			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 
 		} else {
 			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			const snippet = getImportSnippet(null, path, false, this.options, document)
-
-			return (worker: vscode.TextEditorEdit) => worker.insert(vscode.window.activeTextEditor.selection.active, snippet)
+			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 		}
+
+		await JavaScript.fixESLint()
 	}
 
 	private getIndexPath() {
@@ -647,7 +659,9 @@ class NodeItem implements Item {
 		} catch (ex) { }
 	}
 
-	async addImport(document: vscode.TextDocument) {
+	async addImport(editor: vscode.TextEditor) {
+		const document = editor.document
+
 		let name = this.name
 		if (/typescript(react)?/.test(document.languageId)) {
 			name = `* as ${name}`
@@ -670,7 +684,8 @@ class NodeItem implements Item {
 
 		const snippet = getImportSnippet(name, this.path, this.options.syntax === 'import', this.options, document)
 
-		return (worker: vscode.TextEditorEdit) => worker.insert(position, snippet)
+		await editor.edit(worker => worker.insert(position, snippet))
+		await JavaScript.fixESLint()
 	}
 }
 

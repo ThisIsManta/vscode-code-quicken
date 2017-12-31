@@ -45,19 +45,19 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.addImport', async function () {
-        const workingEditor = vscode.window.activeTextEditor
-        const workingDocument = workingEditor && workingEditor.document
+        const editor = vscode.window.activeTextEditor
+        const document = editor && editor.document
 
         // Stop processing if the VS Code is not working with folder, or the current document is untitled
-        if (workingEditor === undefined || workingDocument.isUntitled || vscode.workspace.getWorkspaceFolder(workingDocument.uri) === undefined) {
+        if (editor === undefined || document.isUntitled || vscode.workspace.getWorkspaceFolder(document.uri) === undefined) {
             return null
         }
 
         for (let lang of languages) {
-            let items = await lang.getItems(workingDocument)
+            let items = await lang.getItems(document)
             if (items !== null) {
                 // Stop processing if the active editor has been changed
-                if (workingEditor !== vscode.window.activeTextEditor) {
+                if (editor !== vscode.window.activeTextEditor) {
                     return null
                 }
 
@@ -74,10 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
                 localStorage.recentSelectedItems.markAsRecentlyUsed(lang, selectedItem)
 
                 // Insert the snippet
-                const action = await selectedItem.addImport(workingDocument)
-                if (action) {
-                    workingEditor.edit(action)
-                }
+                await selectedItem.addImport(editor)
 
                 break
             }
@@ -85,15 +82,15 @@ export function activate(context: vscode.ExtensionContext) {
     }))
 
     context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.fixImport', async () => {
-        const workingEditor = vscode.window.activeTextEditor
-        const workingDocument = workingEditor.document
+        const editor = vscode.window.activeTextEditor
+        const document = editor.document
 
         const cancellationEvent = new vscode.CancellationTokenSource()
         const editorChangeEvent = vscode.window.onDidChangeActiveTextEditor(() => {
             cancellationEvent.cancel()
         })
         const documentCloseEvent = vscode.workspace.onDidCloseTextDocument((closingDocument) => {
-            if (workingDocument === closingDocument) {
+            if (document === closingDocument) {
                 cancellationEvent.cancel()
             }
         })
@@ -104,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
                     continue
                 }
 
-                const workingDocumentHasBeenFixed = await lang.fixImport(workingEditor, workingDocument, cancellationEvent.token)
+                const workingDocumentHasBeenFixed = await lang.fixImport(editor, document, cancellationEvent.token)
 
                 // Stop processing if it is handled or cancelled
                 if (workingDocumentHasBeenFixed === true || workingDocumentHasBeenFixed === null) {
