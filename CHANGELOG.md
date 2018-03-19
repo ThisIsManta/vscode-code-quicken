@@ -1,3 +1,7 @@
+### 1.2.1
+- Fixed index file path when fixing an import statement.
+- Fixed Windows path separator.
+
 ### 1.2.0
 - Fixed missing file path when fixing an import/require statement.
 - Fixed wrong index file path.
