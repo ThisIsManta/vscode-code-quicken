@@ -278,11 +278,11 @@ class FileItem implements Item {
 		this.options = options
 
 		// Set containing directory of the given file
-		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
+		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep).replace(/\\/g, '/')
 
 		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
-			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
+			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep).replace(/\\/g, '/')
 		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
