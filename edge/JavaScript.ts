@@ -280,7 +280,7 @@ class FileItem implements Item {
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
-		if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
@@ -302,7 +302,7 @@ class FileItem implements Item {
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
 		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-		if (this.options.indexFile === false && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
 			name = getVariableName(this.fileInfo.directoryName, this.options)
 
