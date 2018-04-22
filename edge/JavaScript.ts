@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as fp from 'path'
 import * as _ from 'lodash'
 import * as vscode from 'vscode'
-import * as babylon from 'babylon'
+import * as ts from 'typescript'
 
 import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
 import FileInfo from './FileInfo'
@@ -138,9 +138,9 @@ export default class JavaScript implements Language {
 			editableRange: vscode.Range
 			private matchingFullPaths: Array<string>
 
-			constructor(path: string, loc: { start: { line: number, column: number }, end: { line: number, column: number } }) {
+			constructor(path: string, start: number, end: number) {
 				this.originalRelativePath = path
-				this.editableRange = new vscode.Range(loc.start.line - 1, loc.start.column, loc.end.line - 1, loc.end.column)
+				this.editableRange = new vscode.Range(document.positionAt(start), document.positionAt(end))
 			}
 
 			get quoteChar() {
@@ -174,20 +174,21 @@ export default class JavaScript implements Language {
 		const codeTree = JavaScript.parse(document.getText())
 
 		const totalImports = _.flatten([
-			_.chain(codeTree.program.body)
-				.filter(node =>
-					node.type === 'ImportDeclaration' &&
-					node.source.value.startsWith('.') &&
-					node.source.value.includes('?') === false &&
-					node.source.value.includes('!') === false &&
-					node.source.value.includes('"') === false
-				)
-				.map((node: any) => new ImportStatementForFixingImport(node.source.value, node.source.loc))
-				.value(),
-			_.chain(findRequireRecursively(codeTree.program.body))
-				.filter((node: any) => node.arguments[0].value.startsWith('.'))
-				.map((node: any) => new ImportStatementForFixingImport(node.arguments[0].value, node.arguments[0].loc))
-				.value(),
+			codeTree.statements
+				.filter(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier))
+				.filter((node: ts.ImportDeclaration) => {
+					const path = (node.moduleSpecifier as ts.StringLiteral).text
+					return (
+						path.startsWith('.') &&
+						path.includes('?') === false &&
+						path.includes('!') === false &&
+						path.includes('"') === false
+					)
+				})
+				.map((node: ts.ImportDeclaration) => new ImportStatementForFixingImport((node.moduleSpecifier as ts.StringLiteral).text, node.getStart(), node.getEnd())),
+			findRequireRecursively(codeTree)
+				.filter(node => node.arguments[0].value.startsWith('.'))
+				.map(node => new ImportStatementForFixingImport(node.arguments[0].value, node.getStart(), node.getEnd())),
 		]).filter(item => item.originalRelativePath)
 
 		const brokenImports = totalImports.filter(item =>
@@ -267,22 +268,7 @@ export default class JavaScript implements Language {
 
 	static parse(code: string) {
 		try {
-			return babylon.parse(code, {
-				sourceType: 'module',
-				plugins: [
-					'jsx',
-					'flow',
-					'doExpressions',
-					'objectRestSpread',
-					'decorators',
-					'classProperties',
-					'exportExtensions',
-					'asyncGenerators',
-					'functionBind',
-					'functionSent',
-					'dynamicImport'
-				]
-			})
+			return ts.createSourceFile('nada', code, ts.ScriptTarget.ESNext, true)
 
 		} catch (ex) {
 			console.error(ex)
@@ -430,7 +416,7 @@ export class FileItem implements Item {
 					const foreignFileHasDefaultExport = (
 						codeTree === null ||
 						findInCodeTree(codeTree, EXPORT_DEFAULT) !== undefined ||
-						findInCodeTree(codeTree, MODULE_EXPORTS) !== undefined
+						findInCodeTree(codeTree, MODULE_EXPORTS_DEFAULT) !== undefined
 					)
 
 					if (foreignFileHasDefaultExport === false) {
@@ -734,16 +720,27 @@ class NodeItem implements Item {
 	}
 }
 
-export const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
+export const EXPORT_DEFAULT = {
+	type: 'ExportDefaultDeclaration'
+}
 
-export const MODULE_EXPORTS = {
-	type: 'ExpressionStatement',
+export const MODULE_EXPORTS_DEFAULT = {
+	kind: ts.SyntaxKind.ExpressionStatement,
 	expression: {
-		type: 'AssignmentExpression',
+		kind: ts.SyntaxKind.BinaryExpression,
+		operatorToken: {
+			kind: ts.SyntaxKind.EqualsToken,
+		},
 		left: {
-			type: 'MemberExpression',
-			object: { type: 'Identifier', name: 'module' },
-			property: { type: 'Identifier', name: 'exports' }
+			kind: ts.SyntaxKind.PropertyAccessExpression,
+			expression: {
+				kind: ts.SyntaxKind.Identifier,
+				text: 'module',
+			},
+			name: {
+				kind: ts.SyntaxKind.Identifier,
+				text: 'exports',
+			},
 		}
 	}
 }
@@ -928,33 +925,50 @@ function findInCodeTree(source: object, target: object) {
 }
 
 function getExportedVariables(filePath: string): Array<string> {
-	const fileExtn = _.trimStart(fp.extname(filePath), '.')
+	const fileExtension = _.trimStart(fp.extname(filePath), '.')
 	try {
 		const codeTree = JavaScript.parse(fs.readFileSync(filePath, 'utf-8'))
+		return _.chain(codeTree.statements)
+			.map(node => {
+				if (ts.isExportDeclaration(node)) {
+					if (node.exportClause) {
+						return node.exportClause.elements.map(stub => stub.name.text)
 
-		return _.chain(codeTree.program.body)
-			.map((node: any) => {
-				if (node.type === 'ExportNamedDeclaration') {
-					if (node.declaration && node.declaration.type === 'FunctionDeclaration') {
-						return node.declaration.id.name
-
-					} else if (node.declaration && node.declaration.type === 'VariableDeclaration') {
-						return node.declaration.declarations.map(item => item.id.name)
-
-					} else if (node.specifiers) {
-						return node.specifiers.map(item => item.exported ? item.exported.name : item.local.name)
+					} else if (node.moduleSpecifier) {
+						return getExportedVariables(getFilePathWithExtension(fileExtension, filePath, (node.moduleSpecifier as ts.StringLiteral).text))
 					}
 
-				} else if (node.type === 'ExportAllDeclaration' && node.source.value) {
-					return getExportedVariables(getFilePathWithExtension(fileExtn, filePath, node.source.value))
+				} else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword && node.modifiers[1].kind !== ts.SyntaxKind.DefaultKeyword && node.name) {
+					return node.name.text
 
-				} else if (_.isMatch(node, MODULE_EXPORTS) && node.expression.right.type === 'ObjectExpression') {
-					return node.expression.right.properties.map(item => item.key.name)
+				} else if (ts.isVariableStatement(node) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword) {
+					return node.declarationList.declarations.map(stub => stub.name.getText())
+
+				} else if (ts.isExportAssignment(node) && ts.isObjectLiteralExpression(node.expression)) {
+					return node.expression.properties
+						.filter(stub => ts.isPropertyAssignment(stub))
+						.map(stub => stub.name.getText())
+
+				} else if (_.isMatch(node, MODULE_EXPORTS_DEFAULT) && ts.isObjectLiteralExpression(((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right)) {
+					return (((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression).properties
+						.filter(stub => ts.isPropertyAssignment(stub))
+						.map(stub => stub.name.getText())
+
+				} else if (
+					ts.isExpressionStatement(node) &&
+					ts.isBinaryExpression(node.expression) &&
+					ts.isPropertyAccessExpression(node.expression.left) &&
+					ts.isPropertyAccessExpression(node.expression.left.expression) &&
+					ts.isIdentifier(node.expression.left.expression.expression) &&
+					node.expression.left.expression.expression.text === 'module' &&
+					ts.isIdentifier(node.expression.left.expression.name) &&
+					node.expression.left.expression.name.text === 'exports'
+				) {
+					return node.expression.left.name.text
 				}
 			})
 			.flatten()
 			.compact()
-			.reject(name => name === 'default')
 			.value() as Array<string>
 
 	} catch (ex) {
@@ -964,6 +978,7 @@ function getExportedVariables(filePath: string): Array<string> {
 	return []
 }
 
+// TODO: expectedFileExtension should be an array of js/ts
 function getFilePathWithExtension(expectedFileExtension: string, ...path: string[]) {
 	const filePath = fp.resolve(...path)
 
@@ -978,7 +993,7 @@ function getDuplicateImport(existingImports: Array<ImportStatementForReadOnly>, 
 	return existingImports.find(stub => stub.path === path)
 }
 
-function findRequireRecursively(node: any, results = [], visited = new Set()) {
+function findRequireRecursively(node: ts.Node, results: Array<ts.CallExpression> = [], visited = new Set<ts.Node>()) {
 	if (visited.has(node)) {
 		return results
 
@@ -986,18 +1001,12 @@ function findRequireRecursively(node: any, results = [], visited = new Set()) {
 		visited.add(node)
 	}
 
-	if (_.isArrayLike(node)) {
-		_.forEach(node, stub => {
-			findRequireRecursively(stub, results, visited)
-		})
+	if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
+		results.push(node)
+		return results
 
-	} else if (_.isObject(node) && node.type !== undefined) {
-		if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require' && node.arguments.length === 1 && node.arguments[0].type === 'StringLiteral') {
-			results.push(node)
-			return results
-		}
-
-		_.forEach(node, stub => {
+	} else {
+		node.forEachChild(stub => {
 			findRequireRecursively(stub, results, visited)
 		})
 	}
