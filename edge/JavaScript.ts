@@ -20,39 +20,51 @@ export interface LanguageOptions {
 }
 
 export default class JavaScript implements Language {
-	private baseConfig: RootConfigurations
+	protected baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
+
+	protected SUPPORTED_LANGUAGE = /^javascript(react)?/i
+	protected SUPPORTED_EXTENSION = /^jsx?$/
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
 	}
 
+	protected rejectSomeFiles(item: FileItem) {
+		// Remove TypeScript files as JavaScript does not recognize them anyway
+		return /^tsx?$/.test(item.fileInfo.fileExtensionWithoutLeadingDot)
+	}
+
+	protected getLanguageOptions() {
+		return this.baseConfig.javascript
+	}
+
 	async getItems(document: vscode.TextDocument) {
-		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.SUPPORTED_LANGUAGE.test(document.languageId) === false) {
 			return null
 		}
 
 		let items: Array<Item>
 
 		const documentFileInfo = new FileInfo(document.fileName)
-		const documentIsJavaScript = JAVASCRIPT_FILE_EXTENSION.test(documentFileInfo.fileExtensionWithoutLeadingDot)
+		const documentIsJavaScript = /^jsx?$/.test(documentFileInfo.fileExtensionWithoutLeadingDot)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.baseConfig.javascript))
+				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION))
 		}
 
-		const fileFilterRule = _.toPairs(this.baseConfig.javascript.filteredFileList)
+		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
 			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
 			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
 
 		items = _.chain(this.fileItemCache)
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
-			.reject(item => documentIsJavaScript ? TYPESCRIPT_FILE_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot) : false) // Remove TypeScript files as JavaScript does not recognize them anyway
+			.reject(item => this.rejectSomeFiles(item))
 			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
 			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
 			.sortBy([ // Sort files by their path and name
@@ -68,7 +80,7 @@ export default class JavaScript implements Language {
 			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
 				.flatten<string>()
-				.map(name => new NodeItem(name, rootPath, this.baseConfig.javascript))
+				.map(name => new NodeItem(name, rootPath, this.getLanguageOptions()))
 				.sortBy(item => item.name)
 				.value()
 		}
@@ -81,7 +93,7 @@ export default class JavaScript implements Language {
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
 			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
-			this.fileItemCache.push(new FileItem(filePath, rootPath, this.baseConfig.javascript))
+			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION))
 		}
 	}
 
@@ -96,7 +108,7 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.SUPPORTED_LANGUAGE.test(document.languageId) === false) {
 			return false
 		}
 
@@ -185,7 +197,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -208,7 +220,7 @@ export default class JavaScript implements Language {
 			}
 
 			await editor.edit(worker => {
-				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.baseConfig.javascript).getNameAndRelativePath(documentFileInfo.directoryPath)
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
 				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 			})
 		}
@@ -263,8 +275,9 @@ export default class JavaScript implements Language {
 	}
 }
 
-class FileItem implements Item {
+export class FileItem implements Item {
 	private options: LanguageOptions
+	private extension: RegExp
 	readonly id: string
 	readonly label: string
 	readonly description: string
@@ -272,25 +285,26 @@ class FileItem implements Item {
 	sortablePath: string
 	sortableName: string
 
-	constructor(filePath: string, rootPath: string, options: LanguageOptions) {
+	constructor(filePath: string, rootPath: string, options: LanguageOptions, extension: RegExp) {
 		this.fileInfo = new FileInfo(filePath)
 		this.id = this.fileInfo.fullPath
 		this.options = options
+		this.extension = extension
 
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep).replace(/\\/g, '/')
 
-		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep).replace(/\\/g, '/')
-		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+		} else if (this.options.fileExtension === false && this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
 		}
 
 		// Set sorting rank according to the file name
-		if (INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			// Make index file appear on the top of its directory
 			this.sortableName = '!'
 		} else {
@@ -302,14 +316,14 @@ class FileItem implements Item {
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
 		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
 
-		if (this.options.indexFile && INDEX_FILE.test(this.fileInfo.fileNameWithExtension)) {
+		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
 			name = getVariableName(this.fileInfo.directoryName, this.options)
 
 			// Remove "/index.js" from the imported path
 			path = fp.dirname(path)
 
-		} else if (this.options.fileExtension === false && (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot))) {
+		} else if (this.options.fileExtension === false && this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Remove file extension from the imported path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 		}
@@ -334,7 +348,7 @@ class FileItem implements Item {
 		// For JS/TS, insert `import ... from "file.js" with rich features`
 		// For CSS/LESS/SASS/SCSS/Styl, insert `import "file.css"`
 		// Otherwise, insert `require("...")`
-		if (JAVASCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot) || TYPESCRIPT_FILE_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		if (this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Set default imported variable name and its path
 			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			let iden = name
@@ -563,6 +577,11 @@ class FileItem implements Item {
 		}
 	}
 
+	private checkIfIndexPath(fileNameWithExtension: string) {
+		const parts = fileNameWithExtension.split('.')
+		return parts.length === 2 && parts[0] === 'index' && this.extension.test(parts[1])
+	}
+
 	private getIndexPath() {
 		return fp.resolve(this.fileInfo.directoryPath, 'index.' + this.fileInfo.fileExtensionWithoutLeadingDot)
 	}
@@ -698,14 +717,6 @@ class NodeItem implements Item {
 		await JavaScript.fixESLint()
 	}
 }
-
-const SUPPORTED_LANGUAGE = /^(java|type)script(react)?/
-
-const JAVASCRIPT_FILE_EXTENSION = /^jsx?$/
-
-const TYPESCRIPT_FILE_EXTENSION = /^tsx?$/
-
-const INDEX_FILE = /^index\.(js|ts)x?$/
 
 export const EXPORT_DEFAULT = { type: 'ExportDefaultDeclaration' }
 

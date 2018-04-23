@@ -1,3 +1,6 @@
+### 1.3.0
+- Added the separate TypeScript configurations.
+
 ### 1.2.1
 - Fixed index file path when fixing an import statement.
 - Fixed Windows path separator.

@@ -8,6 +8,7 @@ import * as Stylus from './Stylus'
 export interface RootConfigurations {
 	history: number
 	javascript: JavaScript.LanguageOptions
+	typescript: JavaScript.LanguageOptions
 	stylus: Stylus.LanguageOptions
 }
 

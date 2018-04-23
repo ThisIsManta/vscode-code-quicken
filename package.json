@@ -64,17 +64,17 @@
                     "default": "require"
                 },
                 "codeQuicken.javascript.grouping": {
-                    "description": "Allow groupping multiple-imports if and only if \"codeQuicken.javascript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
+                    "description": "Allow grouping multiple-imports if and only if \"codeQuicken.javascript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
                     "type": "boolean",
                     "default": false
                 },
                 "codeQuicken.javascript.fileExtension": {
-                    "description": "Insert JS/JSX/TS/TSX file extension to the path.",
+                    "description": "Insert JS/JSX file extension to the path.",
                     "type": "boolean",
                     "default": true
                 },
                 "codeQuicken.javascript.indexFile": {
-                    "description": "Insert \"index\" file name with JS/JSX/TS/TSX file extension to the path.",
+                    "description": "Insert \"index\" file name with JS/JSX file extension to the path.",
                     "type": "boolean",
                     "default": true
                 },
@@ -115,7 +115,77 @@
                     "default": "none"
                 },
                 "codeQuicken.javascript.filteredFileList": {
-                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and valus must be written in regular expression. For example, you are working on a file named \"foo.js\", and you want to see only the files ended with \".spec.js\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.js$\": \"\\\\.spec\\\\.js$\" }`",
+                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.js\", and you want to see only the files ended with \".spec.js\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.js$\": \"\\\\.spec\\\\.js$\" }`",
+                    "type": "object",
+                    "patternProperties": {
+                        ".": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {}
+                },
+                "codeQuicken.typescript.syntax": {
+                    "description": "Insert either ES2015's import or AMD's require syntax.",
+                    "type": "string",
+                    "enum": [
+                        "import",
+                        "require"
+                    ],
+                    "default": "import"
+                },
+                "codeQuicken.typescript.grouping": {
+                    "description": "Allow grouping multiple-imports if and only if \"codeQuicken.typescript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
+                    "type": "boolean",
+                    "default": true
+                },
+                "codeQuicken.typescript.fileExtension": {
+                    "description": "Insert JS/JSX/TS/TSX file extension to the path.",
+                    "type": "boolean",
+                    "default": true
+                },
+                "codeQuicken.typescript.indexFile": {
+                    "description": "Insert \"index\" file name with JS/JSX/TS/TSX file extension to the path.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "codeQuicken.typescript.quoteCharacter": {
+                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "double"
+                    ],
+                    "default": "double"
+                },
+                "codeQuicken.typescript.semiColons": {
+                    "description": "Insert statement-ending semi-colons.",
+                    "type": "boolean",
+                    "default": true
+                },
+                "codeQuicken.typescript.predefinedVariableNames": {
+                    "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `const bar_123 = require(\"./foo-123.ts\");`",
+                    "type": "object",
+                    "patternProperties": {
+                        ".": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {}
+                },
+                "codeQuicken.typescript.variableNamingConvention": {
+                    "description": "Define variable naming convention. This has no effects on \"codeQuicken.typescript.predefinedVariableNames\"",
+                    "type": "string",
+                    "enum": [
+                        "camelCase",
+                        "PascalCase",
+                        "snake_case",
+                        "lowercase",
+                        "none"
+                    ],
+                    "default": "none"
+                },
+                "codeQuicken.typescript.filteredFileList": {
+                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.ts\", and you want to see only the files ended with \".spec.ts\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.ts$\": \"\\\\.spec\\\\.ts$\" }`",
                     "type": "object",
                     "patternProperties": {
                         ".": {

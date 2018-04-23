@@ -8,6 +8,7 @@ import { RootConfigurations, Language, Item } from './global';
 import LocalStorage from './LocalStorage'
 import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
+import TypeScript from './TypeScript'
 import Stylus from './Stylus'
 
 let languages: Array<Language>
@@ -29,6 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
         languages = [
             // Add new supported languages here
             new JavaScript(rootConfig),
+            new TypeScript(rootConfig),
             new Stylus(rootConfig),
         ]
     }
