@@ -1,3 +1,7 @@
+### 1.4.0
+- Amended picking the closest `package.json` from the current active document.
+- Fixed TypeScript compilation errors.
+
 ### 1.3.0
 - Added the separate TypeScript configurations.
 
