@@ -245,14 +245,14 @@
     },
     "devDependencies": {
         "@types/babylon": "^6.16.2",
-        "@types/lodash": "^4.14.73",
-        "@types/node": "^6.0.86",
-        "typescript": "~2.6.1",
-        "vscode": "^1.1.4"
+        "@types/lodash": "^4.14.108",
+        "@types/node": "^6.0.110",
+        "typescript": "^2.6.2",
+        "vscode": "^1.1.17"
     },
     "dependencies": {
         "babylon": "^6.18.0",
-        "lodash": "^4.17.4",
+        "lodash": "^4.17.10",
         "stylus": "^0.54.5"
     }
 }
