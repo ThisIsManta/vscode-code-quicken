@@ -67,11 +67,13 @@ export default class JavaScript implements Language {
 			.reject(item => this.rejectSomeFiles(item))
 			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
 			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
-			.sortBy([ // Sort files by their path and name
-				item => item.sortablePath,
-				item => item.sortableName,
-			])
 			.value()
+
+		// Sort files by their path and name
+		items = _.sortBy(items, [
+			(item: FileItem) => item.sortablePath,
+			(item: FileItem) => item.sortableName,
+		]) as any as Array<Item>
 
 		let packageJsonPath = _.trimEnd(fp.dirname(document.fileName), fp.sep)
 		while (packageJsonPath !== rootPath && fs.existsSync(fp.join(packageJsonPath, 'package.json')) === false) {
@@ -176,8 +178,8 @@ export default class JavaScript implements Language {
 				.map((node: any) => new ImportStatementForFixingImport(node.source.value, node.source.loc))
 				.value(),
 			_.chain(findRequireRecursively(codeTree.program.body))
-				.filter(node => node.arguments[0].value.startsWith('.'))
-				.map(node => new ImportStatementForFixingImport(node.arguments[0].value, node.arguments[0].loc))
+				.filter((node: any) => node.arguments[0].value.startsWith('.'))
+				.map((node: any) => new ImportStatementForFixingImport(node.arguments[0].value, node.arguments[0].loc))
 				.value(),
 		]).filter(item => item.originalRelativePath)
 

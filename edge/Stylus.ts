@@ -38,14 +38,14 @@ export default class Stylus implements Language {
 				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.baseConfig.stylus))
 		}
 
-		const items = _.chain(this.fileItemCache)
+		let items: Array<Item> = _.chain(this.fileItemCache)
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
 			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
-			.sortBy([ // Sort files by their path and name
-				item => item.sortablePath,
-				item => item.sortableName,
-			])
 			.value()
+		items = _.sortBy([ // Sort files by their path and name
+			item => item.sortablePath,
+			item => item.sortableName,
+		]) as any as Array<Item>
 
 		return items
 	}

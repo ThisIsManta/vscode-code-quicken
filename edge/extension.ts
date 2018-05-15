@@ -63,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return null
                 }
 
-                items = localStorage.recentSelectedItems.sort(lang, items)
+                items = localStorage.recentSelectedItems.sort(lang, items) as Array<Item>
 
                 // Show VS Code picker
                 const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' }) as Item
