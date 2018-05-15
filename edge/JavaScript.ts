@@ -73,7 +73,14 @@ export default class JavaScript implements Language {
 			])
 			.value()
 
-		const packageJsonPath = fp.join(rootPath, 'package.json')
+		let packageJsonPath = _.trimEnd(fp.dirname(document.fileName), fp.sep)
+		while (packageJsonPath !== rootPath && fs.existsSync(fp.join(packageJsonPath, 'package.json')) === false) {
+			const pathList = packageJsonPath.split(fp.sep)
+			pathList.pop()
+			packageJsonPath = pathList.join(fp.sep)
+		}
+		packageJsonPath = fp.join(packageJsonPath, 'package.json')
+
 		if (!this.nodeItemCache && fs.existsSync(packageJsonPath)) {
 			const packageJson = require(packageJsonPath)
 
