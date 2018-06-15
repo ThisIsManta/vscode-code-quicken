@@ -124,6 +124,11 @@
                     },
                     "default": {}
                 },
+                "codeQuicken.javascript.allowTypeScriptFiles": {
+                    "description": "Allow inserting TypeScript files.",
+                    "type": "boolean",
+                    "default": false
+                },
                 "codeQuicken.typescript.syntax": {
                     "description": "Insert either ES2015's import or AMD's require syntax.",
                     "type": "string",

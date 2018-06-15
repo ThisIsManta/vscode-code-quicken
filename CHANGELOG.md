@@ -1,3 +1,6 @@
+### 1.5.0
+- Added ability to import TypeScript files to JavaScript files.
+
 ### 1.4.0
 - Amended picking the closest `package.json` from the current active document.
 - Fixed TypeScript compilation errors.

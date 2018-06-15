@@ -19,43 +19,51 @@ export interface LanguageOptions {
 	filteredFileList: object
 }
 
+export interface ExclusiveLanguageOptions extends LanguageOptions {
+	allowTypeScriptFiles: boolean
+}
+
+const TYPESCRIPT_EXTENSION = /^tsx?$/
+
 export default class JavaScript implements Language {
 	protected baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
 
-	protected SUPPORTED_LANGUAGE = /^javascript(react)?/i
-	protected SUPPORTED_EXTENSION = /^jsx?$/
+	protected WORKING_LANGUAGE = /^javascript(react)?/i
+	protected WORKING_EXTENSION = /^jsx?$/
+	protected allowTypeScriptFiles = false
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
-	}
 
-	protected rejectSomeFiles(item: FileItem) {
-		// Remove TypeScript files as JavaScript does not recognize them anyway
-		return /^tsx?$/.test(item.fileInfo.fileExtensionWithoutLeadingDot)
+		const exclusiveConfig: ExclusiveLanguageOptions = this.baseConfig.javascript
+		if (exclusiveConfig && exclusiveConfig.allowTypeScriptFiles) {
+			this.allowTypeScriptFiles = true
+
+			this.WORKING_EXTENSION = /^(j|t)sx?$/
+		}
 	}
 
 	protected getLanguageOptions() {
-		return this.baseConfig.javascript
+		return this.baseConfig.javascript as LanguageOptions
 	}
 
 	async getItems(document: vscode.TextDocument) {
-		if (this.SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.WORKING_LANGUAGE.test(document.languageId) === false) {
 			return null
 		}
 
 		let items: Array<Item>
 
 		const documentFileInfo = new FileInfo(document.fileName)
-		const documentIsJavaScript = /^jsx?$/.test(documentFileInfo.fileExtensionWithoutLeadingDot)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION))
+				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION))
 		}
 
 		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
@@ -64,7 +72,8 @@ export default class JavaScript implements Language {
 
 		items = _.chain(this.fileItemCache)
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
-			.reject(item => this.rejectSomeFiles(item))
+			.filter(item => this.allowTypeScriptFiles ||
+				!TYPESCRIPT_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot))
 			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
 			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
 			.value()
@@ -102,7 +111,7 @@ export default class JavaScript implements Language {
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
 			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
-			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION))
+			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION))
 		}
 	}
 
@@ -117,11 +126,9 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (this.SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.WORKING_LANGUAGE.test(document.languageId) === false) {
 			return false
 		}
-
-		const actions: Array<(worker: vscode.TextEditorEdit) => void> = []
 
 		const documentFileInfo = new FileInfo(document.fileName)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
@@ -158,7 +165,7 @@ export default class JavaScript implements Language {
 			readonly description: string
 			readonly fullPath: string
 
-			constructor(fullPath: string, originalRelativePath: string) {
+			constructor(fullPath: string) {
 				this.fullPath = fullPath
 				this.label = fullPath.substring(rootPath.length).replace(/\\/g, '/')
 			}
@@ -206,7 +213,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -218,7 +225,7 @@ export default class JavaScript implements Language {
 		for (const item of manualSolvableImports) {
 			const matchingFullPaths = await item.search()
 
-			const candidateItems = matchingFullPaths.map(path => new FileItemForFixingImport(path, item.originalRelativePath))
+			const candidateItems = matchingFullPaths.map(path => new FileItemForFixingImport(path))
 			const selectedItem = await vscode.window.showQuickPick(candidateItems, { placeHolder: item.originalRelativePath, ignoreFocusOut: true })
 			if (!selectedItem) {
 				return null
@@ -229,7 +236,7 @@ export default class JavaScript implements Language {
 			}
 
 			await editor.edit(worker => {
-				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions(), this.SUPPORTED_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
 				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 			})
 		}
