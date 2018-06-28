@@ -1,5 +1,3 @@
-# Code Quicken
-
 **Code Quicken** is yet another Visual Studio Code extension that helps inserting `import`/`require` snippets.
 
 Previously, **Code Quicken** was generally designed to insert any snippets, but since **VS Code** version 1.17 introduced the built-in [snippet transformation](https://code.visualstudio.com/updates/v1_17#_snippet-transforms), the purpose of this extension has changed to inserting `import`/`require` statements only. If you are still using the features in the previous version, feel free to [download the VSIX file](https://github.com/ThisIsManta/vscode-code-quicken/raw/master/docs/code-quicken-0.0.10.vsix) and [manually install it](https://code.visualstudio.com/docs/editor/extension-gallery#_install-from-a-vsix).
