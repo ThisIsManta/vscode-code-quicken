@@ -703,7 +703,17 @@ class NodeItem implements Item {
 
 		let name = this.name
 		if (/typescript(react)?/.test(document.languageId)) {
-			name = `* as ${name}`
+			const tsConfigPaths = await vscode.workspace.findFiles('**/tsconfig.json')
+			const tsConfigPath = tsConfigPaths.find(file => document.uri.fsPath.startsWith(fp.dirname(file.fsPath)))
+			let esModuleInterop = false
+			if (tsConfigPath) {
+				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath.fsPath, 'utf-8'))
+				esModuleInterop = _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
+			}
+
+			if (esModuleInterop === false) {
+				name = `* as ${name}`
+			}
 		}
 
 		const codeTree = JavaScript.parse(document.getText())
