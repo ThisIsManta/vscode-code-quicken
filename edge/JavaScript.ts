@@ -351,7 +351,7 @@ export class FileItem implements Item {
 
 		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			beforeFirstImport = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
+			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
 		}
 
 		// For JS/TS, insert `import ... from "file.js" with rich features`
@@ -382,7 +382,7 @@ export class FileItem implements Item {
 					// Stop processing if there is `import * as name from "path"`
 					if (exportedVariables.length > 0 && duplicateImportHasImportedEverything) {
 						vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`)
-						focusAt(duplicateImportForIndexFile)
+						focusAt(duplicateImportForIndexFile.node, document)
 						return null
 					}
 
@@ -455,18 +455,20 @@ export class FileItem implements Item {
 			if (duplicateImport) {
 				// Try merging named imports together
 				// Note that we cannot merge with `import * as name from "path"`
-				if (this.options.grouping && duplicateImport.node.type === 'ImportDeclaration') {
-					const duplicateEverythingImport = duplicateImport.node.specifiers.find(node => node.type === 'ImportNamespaceSpecifier')
+				if (this.options.grouping && ts.isImportDeclaration(duplicateImport.node) && duplicateImport.node.importClause) {
+					const everythingImport = ts.isNamespaceImport(duplicateImport.node.importClause.namedBindings) ? duplicateImport.node.importClause.namedBindings : null
 
 					// Stop processing if there is `import * as name from "path"`
-					if (duplicateEverythingImport && (name.startsWith('{') || name.startsWith('*'))) {
-						vscode.window.showInformationMessage(`The module "${path}" has been already imported as "${duplicateEverythingImport.local.name}".`)
-						focusAt(duplicateImport.node.specifiers[0].loc)
+					if (everythingImport && (name.startsWith('{') || name.startsWith('*'))) {
+						vscode.window.showInformationMessage(`The module "${path}" has been already imported as "${everythingImport.name.text}".`)
+						focusAt(everythingImport, document)
 						return null
 					}
 
 					// Replace the existing import with the namespace import
-					if (name.startsWith('*')) {
+					/* if (name.startsWith('*')) {
+						const namedImport = duplicateImport.node
+
 						const firstNameNode = _.first(duplicateImport.node.specifiers) as any
 						const lastNameNode = _.last(duplicateImport.node.specifiers) as any
 						let duplicateRange = new vscode.Range(firstNameNode.loc.start.line - 1, firstNameNode.loc.start.column, lastNameNode.loc.end.line - 1, lastNameNode.loc.end.column)
@@ -490,53 +492,44 @@ export class FileItem implements Item {
 						await editor.edit(worker => worker.replace(duplicateRange, name))
 						await JavaScript.fixESLint()
 						return null
-					}
+					} */
 
-					let duplicateNamedImport = null
-					const importedVariables = duplicateImport.node.specifiers as Array<any>
-					for (let node of importedVariables) {
-						if (node.type === 'ImportDefaultSpecifier' && name.startsWith('{') === false) { // In case of `import name from "path"`
-							duplicateNamedImport = node
-							break
-
-						} else if (node.type === 'ImportSpecifier' && node.imported.name === iden) { // In case of `import { name } from "path"`
-							duplicateNamedImport = node
-							break
-						}
-					}
-
-					if (duplicateNamedImport) {
+					if (duplicateImport.node.importClause && duplicateImport.node.importClause.name && name.startsWith('{') === false) { // In case of `import name from "path"`
 						vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
-						focusAt(duplicateNamedImport.loc)
+						focusAt(duplicateImport.node, document)
+						return null
+					}
+
+					if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings) && duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === iden)) { // In case of `import { name } from "path"`
+						vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+						focusAt(duplicateImport.node, document)
 						return null
 					}
 
 					if (name.startsWith('{')) { // In case of `import { name } from "path"`
-						const lastNamedImport = _.findLast(importedVariables, node => node.type === 'ImportSpecifier')
-						if (lastNamedImport) {
-							const afterLastName = new vscode.Position(lastNamedImport.loc.end.line - 1, lastNamedImport.loc.end.column)
-							await editor.edit(worker => worker.insert(afterLastName, ', ' + iden))
+						if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
+							const afterLastNode = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).end)
+							await editor.edit(worker => worker.insert(afterLastNode, ', ' + iden))
 							await JavaScript.fixESLint()
 							return null
 
 						} else {
-							const lastAnyImport = _.last(importedVariables)
-							const afterLastName = new vscode.Position(lastAnyImport.loc.end.line - 1, lastAnyImport.loc.end.column)
-							await editor.edit(worker => worker.insert(afterLastName, ', ' + name))
+							const afterLastNode = document.positionAt(duplicateImport.node.importClause.name.end)
+							await editor.edit(worker => worker.insert(afterLastNode, ', ' + name))
 							await JavaScript.fixESLint()
 							return null
 						}
 
 					} else { // In case of `import name from "path"`
-						const beforeFirstName = new vscode.Position(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column + ('import '.length))
-						await editor.edit(worker => worker.insert(beforeFirstName, name + ', '))
+						const beforeFirstNode = document.positionAt(duplicateImport.node.importClause.namedBindings.pos)
+						await editor.edit(worker => worker.insert(beforeFirstNode, name + ', '))
 						await JavaScript.fixESLint()
 						return null
 					}
 
 				} else {
 					vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
-					focusAt(duplicateImport)
+					focusAt(duplicateImport.node, document)
 					return null
 				}
 			}
@@ -568,7 +561,7 @@ export class FileItem implements Item {
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
 				vscode.window.showInformationMessage(`The module "${this.label}" has been already imported.`)
-				focusAt(duplicateImport)
+				focusAt(duplicateImport.node, document)
 				return null
 			}
 
@@ -722,7 +715,7 @@ class NodeItem implements Item {
 		const duplicateImport = existingImports.find(item => item.path === this.path)
 		if (duplicateImport) {
 			vscode.window.showInformationMessage(`The module "${this.path}" has been already imported.`)
-			focusAt(duplicateImport)
+			focusAt(duplicateImport.node, document)
 			return null
 		}
 
@@ -759,29 +752,22 @@ export const MODULE_EXPORTS_DEFAULT = {
 	}
 }
 
-export const MODULE_REQUIRE = {
-	type: 'VariableDeclarator',
-	init: {
-		type: 'CallExpression',
-		callee: {
-			type: 'Identifier',
-			name: 'require'
-		},
-		arguments: [
-			{ type: 'StringLiteral' }
-		]
-	}
+export const MODULE_REQUIRE_IMMEDIATE = {
+	kind: ts.SyntaxKind.CallExpression,
+	expression: {
+		kind: ts.SyntaxKind.Identifier,
+		text: 'require'
+	},
+	arguments: [
+		{
+			kind: ts.SyntaxKind.StringLiteral
+		}
+	]
 }
 
-export const MODULE_REQUIRE_IMMEDIATE = {
-	type: 'ExpressionStatement',
-	expression: {
-		type: 'CallExpression',
-		callee: {
-			type: 'Identifier',
-			name: 'require'
-		}
-	}
+export const MODULE_REQUIRE = {
+	kind: ts.SyntaxKind.VariableDeclaration,
+	initializer: MODULE_REQUIRE_IMMEDIATE
 }
 
 const IMPORT_EVERYTHING = {
@@ -794,51 +780,35 @@ const IMPORT_EVERYTHING = {
 }
 
 interface ImportStatementForReadOnly {
-	node: any,
+	node: ts.Node,
 	path: string,
-	start: { line: number, column: number },
-	end: { line: number, column: number },
 }
 
-function getExistingImports(codeTree: any) {
-	let imports: ImportStatementForReadOnly[] = []
-	if (codeTree && codeTree.program && codeTree.program.body) {
-		// For `import '...'`
-		//     `import name from '...'`
-		//     `import { name } from '...'`
-		imports = imports.concat(codeTree.program.body
-			.filter((line: any) => line.type === 'ImportDeclaration' && line.source && line.source.type === 'StringLiteral')
-			.map((stub: any) => ({
-				node: stub,
-				...stub.loc,
-				path: _.trimEnd(stub.source.value, '/'),
-			}))
-		)
+function getExistingImports(codeTree: ts.SourceFile) {
+	const imports: ImportStatementForReadOnly[] = []
 
-		// For `var name = require('...')`
-		//     `var { name } = require('...')`
-		imports = imports.concat(_.flatten(codeTree.program.body
-			.filter((line: any) => line.type === 'VariableDeclaration')
-			.map((line: any) => line.declarations
-				.filter(stub => _.isMatch(stub, MODULE_REQUIRE))
-				.map(stub => ({
-					node: stub,
-					...line.loc,
-					path: stub.init.arguments[0].value,
-				}))
-			)
-		))
+	codeTree.forEachChild(node => {
+		if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+			// For `import '...'`
+			//     `import name from '...'`
+			//     `import { name } from '...'`
+			imports.push({ node, path: _.trimEnd(node.moduleSpecifier.text, '/') })
 
-		// For `require('...')`
-		imports = imports.concat(codeTree.program.body
-			.filter((stub: any) => _.isMatch(stub, MODULE_REQUIRE_IMMEDIATE) && stub.expression.arguments.length === 1)
-			.map((stub: any) => ({
-				node: stub,
-				...stub.loc,
-				path: stub.expression.arguments[0].value,
-			}))
-		)
-	}
+		} else if (ts.isVariableStatement(node)) {
+			// For `var name = require('...')`
+			//     `var { name } = require('...')`
+			node.declarationList.declarations.forEach(node => {
+				if (_.isMatch(node, MODULE_REQUIRE)) {
+					imports.push({ node, path: _.get(node, 'initializer.arguments.0.text') })
+				}
+			})
+
+		} else if (ts.isExpressionStatement(node) && _.isMatch(node.expression, MODULE_REQUIRE_IMMEDIATE)) {
+			// For `require('...')`
+			imports.push({ node, path: _.get(node, 'expression.arguments.0.text') })
+		}
+	})
+
 	return imports
 }
 
@@ -997,7 +967,12 @@ function findRequireRecursively(node: ts.Node, results: Array<ts.CallExpression>
 	return results
 }
 
-function focusAt(node: { start: { line: number, column: number }, end: { line: number, column: number } }) {
-	const position = new vscode.Position(node.start.line - 1, node.end.column)
-	vscode.window.activeTextEditor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport)
+function focusAt(node: { pos: number, end: number }, document: vscode.TextDocument) {
+	vscode.window.activeTextEditor.revealRange(
+		new vscode.Range(
+			document.positionAt(node.pos),
+			document.positionAt(node.end)
+		),
+		vscode.TextEditorRevealType.InCenterIfOutsideViewport
+	)
 }
