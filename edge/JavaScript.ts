@@ -54,8 +54,6 @@ export default class JavaScript implements Language {
 			return null
 		}
 
-		let items: Array<Item>
-
 		const documentFileInfo = new FileInfo(document.fileName)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 
@@ -70,19 +68,30 @@ export default class JavaScript implements Language {
 			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
 			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
 
-		items = _.chain(this.fileItemCache)
-			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
-			.filter(item => this.allowTypeScriptFiles ||
-				!TYPESCRIPT_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot))
-			.filter(item => fileFilterRule ? fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) : true)
-			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
-			.value()
+		const filteredItems: Array<Item> = []
+		for (const item of this.fileItemCache) {
+			if (this.allowTypeScriptFiles === false && TYPESCRIPT_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot)) {
+				continue
+			}
+
+			if (fileFilterRule && fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) === false) {
+				continue
+			}
+
+			if (item.fileInfo.fullPath === documentFileInfo.fullPath) {
+				continue
+			}
+
+			item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo)
+
+			filteredItems.push(item)
+		}
 
 		// Sort files by their path and name
-		items = _.sortBy(items, [
-			(item: FileItem) => item.sortablePath,
-			(item: FileItem) => item.sortableName,
-		]) as any as Array<Item>
+		const sortedItems = _.sortBy(filteredItems, [
+			item => item.sortablePath,
+			item => item.sortableName,
+		])
 
 		let packageJsonPath = _.trimEnd(fp.dirname(document.fileName), fp.sep)
 		while (packageJsonPath !== rootPath && fs.existsSync(fp.join(packageJsonPath, 'package.json')) === false) {
@@ -103,9 +112,7 @@ export default class JavaScript implements Language {
 				.value()
 		}
 
-		items = items.concat(this.nodeItemCache || [])
-
-		return items
+		return [...sortedItems, ...(this.nodeItemCache || [])] as Array<Item>
 	}
 
 	addItem(filePath: string) {
@@ -187,8 +194,8 @@ export default class JavaScript implements Language {
 				})
 				.map((node: ts.ImportDeclaration) => new ImportStatementForFixingImport((node.moduleSpecifier as ts.StringLiteral).text, node.getStart(), node.getEnd())),
 			findRequireRecursively(codeTree)
-				.filter(node => node.arguments[0].value.startsWith('.'))
-				.map(node => new ImportStatementForFixingImport(node.arguments[0].value, node.getStart(), node.getEnd())),
+				.filter(node => (node.arguments[0] as ts.StringLiteral).text.startsWith('.'))
+				.map(node => new ImportStatementForFixingImport((node.arguments[0] as ts.StringLiteral).text, node.getStart(), node.getEnd())),
 		]).filter(item => item.originalRelativePath)
 
 		const brokenImports = totalImports.filter(item =>
@@ -415,8 +422,8 @@ export class FileItem implements Item {
 
 					const foreignFileHasDefaultExport = (
 						codeTree === null ||
-						findInCodeTree(codeTree, EXPORT_DEFAULT) !== undefined ||
-						findInCodeTree(codeTree, MODULE_EXPORTS_DEFAULT) !== undefined
+						codeTree.statements.some(node => ts.isExportAssignment(node)) ||
+						codeTree.statements.some(node => _.isMatch(node, MODULE_EXPORTS_DEFAULT))
 					)
 
 					if (foreignFileHasDefaultExport === false) {
@@ -596,16 +603,21 @@ export class FileItem implements Item {
 		try {
 			const codeTree = JavaScript.parse(fs.readFileSync(this.getIndexPath(), 'utf-8'))
 
-			const importedVariableSourceDict = codeTree.program.body.filter(node => node.type === 'ImportDeclaration')
-				.reduce((hash, node: any) => {
-					(node.specifiers || []).forEach(item => {
-						if (item.type === 'ImportDefaultSpecifier') {
-							hash[item.local.name] = fp.resolve(this.fileInfo.directoryPath, node.source.value)
-
-						} else if (item.type === 'ImportSpecifier') {
-							hash[item.imported.name] = fp.resolve(this.fileInfo.directoryPath, node.source.value)
+			const importedVariableSourceDict = codeTree.statements
+				.filter(node => ts.isImportDeclaration(node))
+				.reduce((hash, node: ts.ImportDeclaration) => {
+					const relaPath = (node.moduleSpecifier as ts.StringLiteral).text
+					const fullPath = fp.resolve(this.fileInfo.directoryPath, relaPath)
+					if (node.importClause.name) {
+						hash[node.importClause.name.text] = fullPath
+					}
+					if (ts.isNamedImports(node.importClause.namedBindings)) {
+						for (const stub of node.importClause.namedBindings.elements) {
+							hash[stub.name.text] = fullPath
 						}
-					})
+					} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
+						hash[node.importClause.namedBindings.name.text] = fullPath
+					}
 					return hash
 				}, {})
 
@@ -625,29 +637,25 @@ export class FileItem implements Item {
 				}
 			}
 
-			codeTree.program.body.filter(node => node.type === 'ExportNamedDeclaration')
-				.forEach((node: any) => {
-					node.specifiers.forEach(item => {
-						if (item => item.type === 'ExportSpecifier' && item.local && item.local.type === 'Identifier') {
-							const name = item.local.name
-							let path
-							if (node.source) {
-								path = getFilePathWithExtension(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, node.source.value)
-							} else {
-								path = getFilePathWithExtension(this.fileInfo.fileExtensionWithoutLeadingDot, importedVariableSourceDict[name])
-							}
+			codeTree.forEachChild(node => {
+				if (ts.isExportDeclaration(node)) {
+					if (ts.isNamedExports(node.exportClause)) {
+						for (const stub of node.exportClause.elements) {
+							const name = stub.name.text
+							const path = node.moduleSpecifier
+								? (node.moduleSpecifier as ts.StringLiteral).text
+								: importedVariableSourceDict[name]
 							save(name, path)
 						}
-					})
-				})
 
-			codeTree.program.body.filter(node => node.type === 'ExportAllDeclaration')
-				.forEach((node: any) => {
-					const path = getFilePathWithExtension(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, node.source.value)
-					getExportedVariables(path).forEach(name => {
-						save(name, path)
-					})
-				})
+					} else if (!node.exportClause && node.moduleSpecifier) {
+						const path = getFilePathWithExtension(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, (node.moduleSpecifier as ts.StringLiteral).text)
+						getExportedVariables(path).forEach(name => {
+							save(name, path)
+						})
+					}
+				}
+			})
 
 			if (this.fileInfo.fileNameWithoutExtension === 'index') {
 				return exportedVariableList
@@ -718,10 +726,6 @@ class NodeItem implements Item {
 		await editor.edit(worker => worker.insert(position, snippet))
 		await JavaScript.fixESLint()
 	}
-}
-
-export const EXPORT_DEFAULT = {
-	type: 'ExportDefaultDeclaration'
 }
 
 export const MODULE_EXPORTS_DEFAULT = {
@@ -885,45 +889,6 @@ function getImportSnippet(name: string, path: string, useImport: boolean, option
 	}
 }
 
-function findInCodeTree(source: object, target: object) {
-	if (source === null) {
-		return undefined
-
-	} else if (source['type'] === 'File' && source['program']) {
-		return findInCodeTree(source['program'], target)
-
-	} else if (_.isMatch(source, target)) {
-		return source
-
-	} else if (_.isArrayLike(source['body'])) {
-		for (let index = 0; index < source['body'].length; index++) {
-			const result = findInCodeTree(source['body'][index], target)
-			if (result !== undefined) {
-				return result
-			}
-		}
-		return undefined
-
-	} else if (_.isObject(source['body'])) {
-		return findInCodeTree(source['body'], target)
-
-	} else if (_.get(source, 'type', '').endsWith('Declaration') && _.has(source, 'declaration')) {
-		return findInCodeTree(source['declaration'], target)
-
-	} else if (_.get(source, 'type', '').endsWith('Declaration') && _.has(source, 'declarations') && _.isArray(source['declarations'])) {
-		for (let index = 0; index < source['declarations'].length; index++) {
-			const result = findInCodeTree(source['declarations'][index], target)
-			if (result !== undefined) {
-				return result
-			}
-		}
-		return undefined
-
-	} else {
-		return undefined
-	}
-}
-
 function getExportedVariables(filePath: string): Array<string> {
 	const fileExtension = _.trimStart(fp.extname(filePath), '.')
 	try {
@@ -932,24 +897,31 @@ function getExportedVariables(filePath: string): Array<string> {
 			.map(node => {
 				if (ts.isExportDeclaration(node)) {
 					if (node.exportClause) {
+						// export { ... }
 						return node.exportClause.elements.map(stub => stub.name.text)
 
 					} else if (node.moduleSpecifier) {
+						// export * from '...'
 						return getExportedVariables(getFilePathWithExtension(fileExtension, filePath, (node.moduleSpecifier as ts.StringLiteral).text))
 					}
 
 				} else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword && node.modifiers[1].kind !== ts.SyntaxKind.DefaultKeyword && node.name) {
+					// export default function () {}
+					// export default class {}
 					return node.name.text
 
 				} else if (ts.isVariableStatement(node) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword) {
+					// export const ...
 					return node.declarationList.declarations.map(stub => stub.name.getText())
 
 				} else if (ts.isExportAssignment(node) && ts.isObjectLiteralExpression(node.expression)) {
+					// export default { ... }
 					return node.expression.properties
 						.filter(stub => ts.isPropertyAssignment(stub))
 						.map(stub => stub.name.getText())
 
 				} else if (_.isMatch(node, MODULE_EXPORTS_DEFAULT) && ts.isObjectLiteralExpression(((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right)) {
+					// module.exports = ...
 					return (((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression).properties
 						.filter(stub => ts.isPropertyAssignment(stub))
 						.map(stub => stub.name.getText())
@@ -964,6 +936,7 @@ function getExportedVariables(filePath: string): Array<string> {
 					ts.isIdentifier(node.expression.left.expression.name) &&
 					node.expression.left.expression.name.text === 'exports'
 				) {
+					// module.exports['...'] = ...
 					return node.expression.left.name.text
 				}
 			})
