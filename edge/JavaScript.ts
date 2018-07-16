@@ -58,8 +58,7 @@ export default class JavaScript implements Language {
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
-			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions()))
+			this.fileItemCache = fileLinks.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions()))
 		}
 
 		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
@@ -371,7 +370,10 @@ export class FileItem implements Item {
 					}
 
 					const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
-					const duplicateImportHasImportedEverything = _.isMatch(duplicateImportForIndexFile && duplicateImportForIndexFile.node, IMPORT_EVERYTHING)
+					const duplicateImportHasImportedEverything = duplicateImportForIndexFile &&
+						ts.isImportDeclaration(duplicateImportForIndexFile.node) &&
+						duplicateImportForIndexFile.node.importClause &&
+						ts.isNamespaceImport(duplicateImportForIndexFile.node.importClause.namedBindings)
 
 					// Stop processing if there is `import * as name from "path"`
 					if (exportedVariables.length > 0 && duplicateImportHasImportedEverything) {
@@ -590,7 +592,7 @@ export class FileItem implements Item {
 	}
 
 	private getIndexPath() {
-		return fp.resolve(this.fileInfo.directoryPath, 'index.' + this.fileInfo.fileExtensionWithoutLeadingDot)
+		return getFilePathWithExtension([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
 	}
 
 	private hasIndexFile() {
@@ -599,22 +601,26 @@ export class FileItem implements Item {
 
 	private getExportedVariablesFromIndexFile() {
 		try {
+			const indexFilePath = this.getIndexPath()
 			const codeTree = JavaScript.parse(fs.readFileSync(this.getIndexPath(), 'utf-8'))
 
 			const importedVariableSourceDict = codeTree.statements
 				.filter(node => ts.isImportDeclaration(node))
 				.reduce((hash, node: ts.ImportDeclaration) => {
 					const relaPath = (node.moduleSpecifier as ts.StringLiteral).text
-					const fullPath = fp.resolve(this.fileInfo.directoryPath, relaPath)
+					const fullPath = getFilePathWithExtension([this.fileInfo.directoryPath, relaPath], _.trimStart(fp.extname(indexFilePath), '.'))
+
 					if (node.importClause.name) {
 						hash[node.importClause.name.text] = fullPath
 					}
-					if (ts.isNamedImports(node.importClause.namedBindings)) {
-						for (const stub of node.importClause.namedBindings.elements) {
-							hash[stub.name.text] = fullPath
+					if (node.importClause.namedBindings) {
+						if (ts.isNamedImports(node.importClause.namedBindings)) {
+							for (const stub of node.importClause.namedBindings.elements) {
+								hash[stub.name.text] = fullPath
+							}
+						} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
+							hash[node.importClause.namedBindings.name.text] = fullPath
 						}
-					} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
-						hash[node.importClause.namedBindings.name.text] = fullPath
 					}
 					return hash
 				}, {})
@@ -637,7 +643,7 @@ export class FileItem implements Item {
 
 			codeTree.forEachChild(node => {
 				if (ts.isExportDeclaration(node)) {
-					if (ts.isNamedExports(node.exportClause)) {
+					if (node.exportClause && ts.isNamedExports(node.exportClause)) {
 						for (const stub of node.exportClause.elements) {
 							const name = stub.name.text
 							const path = node.moduleSpecifier
@@ -647,7 +653,7 @@ export class FileItem implements Item {
 						}
 
 					} else if (!node.exportClause && node.moduleSpecifier) {
-						const path = getFilePathWithExtension(this.fileInfo.fileExtensionWithoutLeadingDot, this.fileInfo.directoryPath, (node.moduleSpecifier as ts.StringLiteral).text)
+						const path = getFilePathWithExtension([this.fileInfo.directoryPath, (node.moduleSpecifier as ts.StringLiteral).text], this.fileInfo.fileExtensionWithoutLeadingDot)
 						getExportedVariables(path).forEach(name => {
 							save(name, path)
 						})
@@ -778,15 +784,6 @@ export const MODULE_REQUIRE = {
 	initializer: MODULE_REQUIRE_IMMEDIATE
 }
 
-const IMPORT_EVERYTHING = {
-	type: 'ImportDeclaration',
-	specifiers: [
-		{
-			type: 'ImportNamespaceSpecifier'
-		}
-	]
-}
-
 interface ImportStatementForReadOnly {
 	node: ts.Node,
 	path: string,
@@ -885,12 +882,12 @@ function getExportedVariables(filePath: string): Array<string> {
 			.map(node => {
 				if (ts.isExportDeclaration(node)) {
 					if (node.exportClause) {
-						// export { ... }
+						// export { named }
 						return node.exportClause.elements.map(stub => stub.name.text)
 
 					} else if (node.moduleSpecifier) {
-						// export * from '...'
-						return getExportedVariables(getFilePathWithExtension(fileExtension, filePath, (node.moduleSpecifier as ts.StringLiteral).text))
+						// export * from "path"
+						return getExportedVariables(getFilePathWithExtension([filePath, (node.moduleSpecifier as ts.StringLiteral).text], fileExtension))
 					}
 
 				} else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword && node.modifiers[1].kind !== ts.SyntaxKind.DefaultKeyword && node.name) {
@@ -939,15 +936,20 @@ function getExportedVariables(filePath: string): Array<string> {
 	return []
 }
 
-// TODO: expectedFileExtension should be an array of js/ts
-function getFilePathWithExtension(expectedFileExtension: string, ...path: string[]) {
-	const filePath = fp.resolve(...path)
+function getFilePathWithExtension(pathList: Array<string>, preferredExtension: string) {
+	const filePath = fp.resolve(...pathList)
 
-	if (fs.existsSync(filePath)) {
+	if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile) {
 		return filePath
 	}
 
-	return filePath + '.' + expectedFileExtension
+	for (const extension of _.uniq([preferredExtension.toLowerCase(), 'tsx', 'ts', 'jsx', 'js'])) {
+		if (fs.existsSync(filePath + '.' + extension)) {
+			return filePath + '.' + extension
+		}
+	}
+
+	return filePath + '.' + preferredExtension
 }
 
 function getDuplicateImport(existingImports: Array<ImportStatementForReadOnly>, path: string) {
