@@ -1,12 +1,7 @@
-import * as fp from 'path'
-import * as fs from 'fs'
-import * as os from 'os'
-import * as _ from 'lodash'
 import * as vscode from 'vscode'
 
 import { RootConfigurations, Language, Item } from './global';
 import LocalStorage from './LocalStorage'
-import RecentSelectedItems from './RecentSelectedItems'
 import JavaScript from './JavaScript'
 import TypeScript from './TypeScript'
 import Stylus from './Stylus'

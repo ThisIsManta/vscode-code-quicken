@@ -19,30 +19,28 @@ export interface LanguageOptions {
 	filteredFileList: object
 }
 
-export interface ExclusiveLanguageOptions extends LanguageOptions {
-	allowTypeScriptFiles: boolean
-}
-
-const TYPESCRIPT_EXTENSION = /^tsx?$/
+const SUPPORTED_LANGUAGE = /^(java|type)script(react)?/
+const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
 
 export default class JavaScript implements Language {
 	protected baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
-
-	protected WORKING_LANGUAGE = /^javascript(react)?/i
-	protected WORKING_EXTENSION = /^jsx?$/
-	protected allowTypeScriptFiles = false
+	private packageWatch: vscode.FileSystemWatcher
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
 
-		const exclusiveConfig: ExclusiveLanguageOptions = this.baseConfig.javascript
-		if (exclusiveConfig && exclusiveConfig.allowTypeScriptFiles) {
-			this.allowTypeScriptFiles = true
-
-			this.WORKING_EXTENSION = /^(j|t)sx?$/
-		}
+		this.packageWatch = vscode.workspace.createFileSystemWatcher('**/package.json')
+		this.packageWatch.onDidCreate(() => {
+			this.nodeItemCache = null
+		})
+		this.packageWatch.onDidChange(() => {
+			this.nodeItemCache = null
+		})
+		this.packageWatch.onDidDelete(() => {
+			this.nodeItemCache = null
+		})
 	}
 
 	protected getLanguageOptions() {
@@ -50,7 +48,7 @@ export default class JavaScript implements Language {
 	}
 
 	async getItems(document: vscode.TextDocument) {
-		if (this.WORKING_LANGUAGE.test(document.languageId) === false) {
+		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
 			return null
 		}
 
@@ -61,7 +59,7 @@ export default class JavaScript implements Language {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION))
+				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions()))
 		}
 
 		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
@@ -70,10 +68,6 @@ export default class JavaScript implements Language {
 
 		const filteredItems: Array<Item> = []
 		for (const item of this.fileItemCache) {
-			if (this.allowTypeScriptFiles === false && TYPESCRIPT_EXTENSION.test(item.fileInfo.fileExtensionWithoutLeadingDot)) {
-				continue
-			}
-
 			if (fileFilterRule && fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) === false) {
 				continue
 			}
@@ -93,16 +87,17 @@ export default class JavaScript implements Language {
 			item => item.sortableName,
 		])
 
-		let packageJsonPath = _.trimEnd(fp.dirname(document.fileName), fp.sep)
-		while (packageJsonPath !== rootPath && fs.existsSync(fp.join(packageJsonPath, 'package.json')) === false) {
-			const pathList = packageJsonPath.split(fp.sep)
-			pathList.pop()
-			packageJsonPath = pathList.join(fp.sep)
-		}
-		packageJsonPath = fp.join(packageJsonPath, 'package.json')
-
-		if (!this.nodeItemCache && fs.existsSync(packageJsonPath)) {
-			const packageJson = require(packageJsonPath)
+		if (!this.nodeItemCache) {
+			const packageJsonLinkList = await vscode.workspace.findFiles('**/package.json')
+			let packageJson: any = {}
+			if (packageJsonLinkList.length > 0) {
+				const packageJsonPath = _.chain(packageJsonLinkList)
+					.map(link => link.fsPath)
+					.sortBy(path => -fp.dirname(path).split(fp.sep).length)
+					.find(path => document.fileName.startsWith(fp.dirname(path) + fp.sep))
+					.value()
+				packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
+			}
 
 			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
@@ -118,7 +113,7 @@ export default class JavaScript implements Language {
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
 			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
-			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION))
+			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions()))
 		}
 	}
 
@@ -133,7 +128,7 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (this.WORKING_LANGUAGE.test(document.languageId) === false) {
+		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
 			return false
 		}
 
@@ -221,7 +216,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions()).getNameAndRelativePath(documentFileInfo.directoryPath)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -244,7 +239,7 @@ export default class JavaScript implements Language {
 			}
 
 			await editor.edit(worker => {
-				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions(), this.WORKING_EXTENSION).getNameAndRelativePath(documentFileInfo.directoryPath)
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions()).getNameAndRelativePath(documentFileInfo.directoryPath)
 				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 			})
 		}
@@ -271,6 +266,7 @@ export default class JavaScript implements Language {
 	reset() {
 		this.fileItemCache = null
 		this.nodeItemCache = null
+		this.packageWatch.dispose()
 	}
 
 	static parse(code: string) {
@@ -286,7 +282,6 @@ export default class JavaScript implements Language {
 
 export class FileItem implements Item {
 	private options: LanguageOptions
-	private extension: RegExp
 	readonly id: string
 	readonly label: string
 	readonly description: string
@@ -294,11 +289,10 @@ export class FileItem implements Item {
 	sortablePath: string
 	sortableName: string
 
-	constructor(filePath: string, rootPath: string, options: LanguageOptions, extension: RegExp) {
+	constructor(filePath: string, rootPath: string, options: LanguageOptions) {
 		this.fileInfo = new FileInfo(filePath)
 		this.id = this.fileInfo.fullPath
 		this.options = options
-		this.extension = extension
 
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep).replace(/\\/g, '/')
@@ -306,7 +300,7 @@ export class FileItem implements Item {
 		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep).replace(/\\/g, '/')
-		} else if (this.options.fileExtension === false && this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		} else if (this.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -332,7 +326,7 @@ export class FileItem implements Item {
 			// Remove "/index.js" from the imported path
 			path = fp.dirname(path)
 
-		} else if (this.options.fileExtension === false && this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		} else if (this.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Remove file extension from the imported path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 		}
@@ -357,7 +351,7 @@ export class FileItem implements Item {
 		// For JS/TS, insert `import ... from "file.js" with rich features`
 		// For CSS/LESS/SASS/SCSS/Styl, insert `import "file.css"`
 		// Otherwise, insert `require("...")`
-		if (this.extension.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Set default imported variable name and its path
 			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
 			let iden = name
@@ -592,7 +586,7 @@ export class FileItem implements Item {
 
 	private checkIfIndexPath(fileNameWithExtension: string) {
 		const parts = fileNameWithExtension.split('.')
-		return parts.length === 2 && parts[0] === 'index' && this.extension.test(parts[1])
+		return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
 	}
 
 	private getIndexPath() {
@@ -706,12 +700,16 @@ class NodeItem implements Item {
 		const document = editor.document
 
 		let name = this.name
-		if (/typescript(react)?/.test(document.languageId)) {
+		if (/^typescript(react)?$/.test(document.languageId)) {
 			const tsConfigPaths = await vscode.workspace.findFiles('**/tsconfig.json')
-			const tsConfigPath = tsConfigPaths.find(file => document.uri.fsPath.startsWith(fp.dirname(file.fsPath)))
+			const tsConfigPath = _.chain(tsConfigPaths)
+				.map(link => link.fsPath)
+				.sortBy(path => -fp.dirname(path).split(fp.sep).length)
+				.find(path => document.uri.fsPath.startsWith(path + fp.sep))
+				.value()
 			let esModuleInterop = false
 			if (tsConfigPath) {
-				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath.fsPath, 'utf-8'))
+				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath, 'utf-8'))
 				esModuleInterop = _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
 			}
 

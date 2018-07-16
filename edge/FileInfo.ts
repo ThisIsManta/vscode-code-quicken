@@ -1,7 +1,6 @@
 import * as fs from 'fs'
 import * as fp from 'path'
 import * as _ from 'lodash'
-import * as vscode from 'vscode'
 
 const PATH_SEPARATOR_FOR_WINDOWS = /\\/g
 

@@ -124,11 +124,6 @@
                     },
                     "default": {}
                 },
-                "codeQuicken.javascript.allowTypeScriptFiles": {
-                    "description": "Allow inserting TypeScript files.",
-                    "type": "boolean",
-                    "default": false
-                },
                 "codeQuicken.typescript.syntax": {
                     "description": "Insert either ES2015's import or AMD's require syntax.",
                     "type": "string",
@@ -249,13 +244,13 @@
         "postversion": "git push --tags --quiet origin master:master"
     },
     "devDependencies": {
-        "@types/lodash": "^4.14.107",
+        "@types/lodash": "^4.14.112",
         "@types/node": "^8.0.24",
-        "typescript": "^2.7.1",
-        "vscode": "^1.1.17"
+        "vscode": "^1.1.18"
     },
     "dependencies": {
         "lodash": "^4.17.10",
-        "stylus": "^0.54.5"
+        "stylus": "^0.54.5",
+        "typescript": "^2.9.2"
     }
 }
