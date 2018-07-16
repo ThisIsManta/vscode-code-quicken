@@ -453,102 +453,113 @@ export class FileItem implements Item {
 
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
-				// Try merging named imports together
-				// Note that we cannot merge with `import * as name from "path"`
+				// Try merging the given named import with the existing imports
 				if (this.options.grouping && ts.isImportDeclaration(duplicateImport.node) && duplicateImport.node.importClause) {
-					const everythingImport = ts.isNamespaceImport(duplicateImport.node.importClause.namedBindings) ? duplicateImport.node.importClause.namedBindings : null
+					// There are 9 cases as a product of 3 by 3 cases:
+					// 1) `import default from "path"`
+					// 2) `import * as namespace from "path"`
+					// 3) `import { named } from "path"`
 
-					// Stop processing if there is `import * as name from "path"`
-					if (everythingImport && (name.startsWith('{') || name.startsWith('*'))) {
-						vscode.window.showInformationMessage(`The module "${path}" has been already imported as "${everythingImport.name.text}".`)
-						focusAt(everythingImport, document)
-						return null
-					}
-
-					// Replace the existing import with the namespace import
-					/* if (name.startsWith('*')) {
-						const namedImport = duplicateImport.node
-
-						const firstNameNode = _.first(duplicateImport.node.specifiers) as any
-						const lastNameNode = _.last(duplicateImport.node.specifiers) as any
-						let duplicateRange = new vscode.Range(firstNameNode.loc.start.line - 1, firstNameNode.loc.start.column, lastNameNode.loc.end.line - 1, lastNameNode.loc.end.column)
-
-						if (firstNameNode.type === 'ImportSpecifier') {
-							const beforeNameText = document.getText(new vscode.Range(duplicateImport.node.loc.start.line - 1, duplicateImport.node.loc.start.column, firstNameNode.loc.start.line - 1, firstNameNode.loc.start.column))
-							const openBraceDelta = beforeNameText.length - beforeNameText.lastIndexOf('{')
-							const openBracePosition = document.positionAt(firstNameNode.start - openBraceDelta)
-							duplicateRange = new vscode.Range(openBracePosition, duplicateRange.end)
-						}
-
-						if (lastNameNode.type === 'ImportSpecifier') {
-							const afterNameText = document.getText(new vscode.Range(lastNameNode.loc.end.line - 1, lastNameNode.loc.end.column, duplicateImport.node.loc.end.line - 1, duplicateImport.node.loc.end.column))
-							const closeBraceDelta = afterNameText.indexOf('}') + 1
-							const closeBracePosition = document.positionAt(lastNameNode.end + closeBraceDelta)
-							duplicateRange = new vscode.Range(duplicateRange.start, closeBracePosition)
-						}
-
-						// TODO: Add the namespace before the already-imported members
-
-						await editor.edit(worker => worker.replace(duplicateRange, name))
-						await JavaScript.fixESLint()
-						return null
-					} */
-
-					if (duplicateImport.node.importClause && duplicateImport.node.importClause.name && name.startsWith('{') === false) { // In case of `import name from "path"`
-						vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
-						focusAt(duplicateImport.node, document)
-						return null
-					}
-
-					if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings) && duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === iden)) { // In case of `import { name } from "path"`
-						vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
-						focusAt(duplicateImport.node, document)
-						return null
-					}
-
-					if (name.startsWith('{')) { // In case of `import { name } from "path"`
-						if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
-							const afterLastNode = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).end)
-							await editor.edit(worker => worker.insert(afterLastNode, ', ' + iden))
+					if (name.startsWith('*')) {
+						if (duplicateImport.node.importClause.name) {
+							// Try merging `* as namespace` with `default`
+							const position = document.positionAt(duplicateImport.node.importClause.name.end)
+							await editor.edit(worker => worker.insert(position, ', ' + name))
 							await JavaScript.fixESLint()
 							return null
 
 						} else {
-							const afterLastNode = document.positionAt(duplicateImport.node.importClause.name.end)
-							await editor.edit(worker => worker.insert(afterLastNode, ', ' + name))
-							await JavaScript.fixESLint()
+							// Try merging `* as namespace` with `* as namespace`
+							// Try merging `* as namespace` with `{ named }`
+							vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+							focusAt(duplicateImport.node.importClause.namedBindings, document)
 							return null
 						}
 
-					} else { // In case of `import name from "path"`
-						const beforeFirstNode = document.positionAt(duplicateImport.node.importClause.namedBindings.pos)
-						await editor.edit(worker => worker.insert(beforeFirstNode, name + ', '))
-						await JavaScript.fixESLint()
-						return null
+					} else if (name.startsWith('{')) {
+						if (duplicateImport.node.importClause.name) {
+							// Try merging `{ named }` with `default`
+							const position = document.positionAt(duplicateImport.node.importClause.name.end)
+							await editor.edit(worker => worker.insert(position, ', ' + name))
+							await JavaScript.fixESLint()
+							return null
+
+						} else if (ts.isNamespaceImport(duplicateImport.node.importClause.namedBindings)) {
+							// Try merging `{ named }` with `* as namespace`
+							const namespaceImport = duplicateImport.node.importClause.namedBindings
+							vscode.window.showInformationMessage(`The module "${path}" has been already imported as "${namespaceImport.name.text}".`)
+							focusAt(namespaceImport, document)
+							return null
+
+						} else if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
+							// Try merging `{ named }` with `{ named }`
+							if (duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === iden)) {
+								vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+								focusAt(duplicateImport.node, document)
+								return null
+
+							} else {
+								if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
+									const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).end)
+									await editor.edit(worker => worker.insert(position, ', ' + iden))
+									await JavaScript.fixESLint()
+									return null
+
+								} else {
+									const position = document.positionAt(duplicateImport.node.importClause.namedBindings.end - 1)
+									await editor.edit(worker => worker.insert(position, iden))
+									await JavaScript.fixESLint()
+									return null
+								}
+							}
+						}
+
+					} else { // In case of `import default from "path"`
+						if (duplicateImport.node.importClause.name) {
+							// Try merging `default` with `default`
+							vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+							focusAt(duplicateImport.node, document)
+							return null
+
+						} else {
+							// Try merging `default` with `* as namespace`
+							// Try merging `default` with `{ named }`
+							const position = document.positionAt(duplicateImport.node.importClause.namedBindings.pos)
+							await editor.edit(worker => worker.insert(position, name + ', '))
+							await JavaScript.fixESLint()
+							return null
+						}
 					}
 
 				} else {
-					vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
+					vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
 					focusAt(duplicateImport.node, document)
 					return null
 				}
 			}
 
-			const existingVariableHash = _.chain(existingImports)
-				.filter(item => item.node.type === 'ImportDeclaration')
-				.map(item => item.node.specifiers.map(spec => [_.get(spec, 'local.name', ''), item]))
+			/* const existingVariableHash = _.chain(existingImports)
+				.map(item => {
+					if (ts.isImportDeclaration(item.node)) {
+						return item.node.specifiers.map(spec => [_.get(spec, 'local.name', ''), item])
+					}
+				})
+				.compact()
 				.flatten()
 				.reject(pair => pair[0] === '')
 				.fromPairs()
 				.value()
 			const duplicateVariable = existingVariableHash[iden] as ImportStatementForReadOnly
 			if (duplicateVariable) {
-				const options = [{ title: 'Replace It' }, { title: 'Keep Both', isCloseAffordance: true }] as Array<vscode.MessageItem>
+				const options: Array<vscode.MessageItem> = [
+					{ title: 'Replace It' },
+					{ title: 'Keep Both', isCloseAffordance: true }
+				]
 				const selectedOption = await vscode.window.showWarningMessage(`Do you want to replace the existing "${iden}"?`, { modal: true }, ...options)
 				if (selectedOption === options[0]) {
 					await editor.edit(worker => worker.delete(new vscode.Range(duplicateVariable.start.line - 1, duplicateVariable.start.column, duplicateVariable.end.line - 1, duplicateVariable.end.column)))
 				}
-			}
+			} */
 
 			const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
@@ -721,11 +732,10 @@ class NodeItem implements Item {
 
 		let position = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			position = new vscode.Position(existingImports[0].start.line - 1, existingImports[0].start.column)
+			position = document.positionAt(existingImports[0].node.pos)
 		}
 
 		const snippet = getImportSnippet(name, this.path, this.options.syntax === 'import', this.options, document)
-
 		await editor.edit(worker => worker.insert(position, snippet))
 		await JavaScript.fixESLint()
 	}
