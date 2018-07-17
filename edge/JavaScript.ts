@@ -19,7 +19,6 @@ export interface LanguageOptions {
 	filteredFileList: object
 }
 
-const SUPPORTED_LANGUAGE = /^(java|type)script(react)?/
 const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
 
 export default class JavaScript implements Language {
@@ -27,6 +26,8 @@ export default class JavaScript implements Language {
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
 	private packageWatch: vscode.FileSystemWatcher
+
+	protected supportedLanguage = /^javascript(react)?/
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
@@ -44,11 +45,11 @@ export default class JavaScript implements Language {
 	}
 
 	protected getLanguageOptions() {
-		return this.baseConfig.javascript as LanguageOptions
+		return this.baseConfig.javascript
 	}
 
 	async getItems(document: vscode.TextDocument) {
-		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.supportedLanguage.test(document.languageId) === false) {
 			return null
 		}
 
@@ -127,7 +128,7 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (SUPPORTED_LANGUAGE.test(document.languageId) === false) {
+		if (this.supportedLanguage.test(document.languageId) === false) {
 			return false
 		}
 
@@ -711,7 +712,7 @@ class NodeItem implements Item {
 			const tsConfigPath = _.chain(tsConfigPaths)
 				.map(link => link.fsPath)
 				.sortBy(path => -fp.dirname(path).split(fp.sep).length)
-				.find(path => document.uri.fsPath.startsWith(path + fp.sep))
+				.find(path => document.uri.fsPath.startsWith(fp.dirname(path) + fp.sep))
 				.value()
 			let esModuleInterop = false
 			if (tsConfigPath) {
