@@ -216,7 +216,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions()).getNameAndRelativePath(documentFileInfo.directoryPath)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions()).getNameAndRelativePath(document)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -239,7 +239,7 @@ export default class JavaScript implements Language {
 			}
 
 			await editor.edit(worker => {
-				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions()).getNameAndRelativePath(documentFileInfo.directoryPath)
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions()).getNameAndRelativePath(document)
 				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 			})
 		}
@@ -315,9 +315,10 @@ export class FileItem implements Item {
 		}
 	}
 
-	getNameAndRelativePath(directoryPathOfWorkingDocument: string) {
+	getNameAndRelativePath(workingDocument: vscode.TextDocument) {
+		const workingDirectory = new FileInfo(workingDocument.fileName).directoryPath
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
-		let path = this.fileInfo.getRelativePath(directoryPathOfWorkingDocument)
+		let path = this.fileInfo.getRelativePath(workingDirectory)
 
 		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
@@ -341,112 +342,18 @@ export class FileItem implements Item {
 
 		const existingImports = getExistingImports(codeTree)
 
-		const directoryPathOfWorkingDocument = new FileInfo(document.fileName).directoryPath
-
 		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
 			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
 		}
 
-		// For JS/TS, insert `import ... from "file.js" with rich features`
-		// For CSS/LESS/SASS/SCSS/Styl, insert `import "file.css"`
-		// Otherwise, insert `require("...")`
 		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			// Set default imported variable name and its path
-			let { name, path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
-			let iden = name
-
-			let foundIndexFileAndWentForIt = false
-
-			if (this.options.syntax === 'import') {
-				if (this.hasIndexFile()) {
-					const exportedVariables = this.getExportedVariablesFromIndexFile()
-
-					let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(directoryPathOfWorkingDocument)
-					if (this.options.indexFile === false) {
-						indexFileRelativePath = fp.dirname(indexFileRelativePath)
-
-					} else if (this.options.fileExtension === false) {
-						indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
-					}
-
-					const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
-					const duplicateImportHasImportedEverything = duplicateImportForIndexFile &&
-						ts.isImportDeclaration(duplicateImportForIndexFile.node) &&
-						duplicateImportForIndexFile.node.importClause &&
-						ts.isNamespaceImport(duplicateImportForIndexFile.node.importClause.namedBindings)
-
-					// Stop processing if there is `import * as name from "path"`
-					if (exportedVariables.length > 0 && duplicateImportHasImportedEverything) {
-						vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`)
-						focusAt(duplicateImportForIndexFile.node, document)
-						return null
-					}
-
-					if (exportedVariables.length === 1) {
-						// Set `import { name } from "path/index.js"` when the index file exports only one
-						iden = exportedVariables[0]
-						name = `{ ${iden} }`
-
-						path = indexFileRelativePath
-
-						foundIndexFileAndWentForIt = true
-
-					} else if (exportedVariables.length > 1) {
-						// Let the user choose between `import * as name from "path/index.js"` or `import { name } from "path/index.js"`
-						const selectedName = await vscode.window.showQuickPick(['*', ...exportedVariables])
-
-						if (!selectedName) {
-							return null
-						}
-
-						if (selectedName === '*') {
-							name = '* as ' + iden
-						} else {
-							iden = selectedName
-							name = '{ ' + iden + ' }'
-						}
-
-						path = indexFileRelativePath
-
-						foundIndexFileAndWentForIt = true
-					}
-				}
-
-				if (foundIndexFileAndWentForIt === false) {
-					const codeText = fs.readFileSync(this.fileInfo.fullPath, 'utf-8')
-					const codeTree = JavaScript.parse(codeText)
-
-					const foreignFileHasDefaultExport = (
-						codeTree === null ||
-						codeTree.statements.some(node => ts.isExportAssignment(node)) ||
-						codeTree.statements.some(node => _.isMatch(node, MODULE_EXPORTS_DEFAULT))
-					)
-
-					if (foreignFileHasDefaultExport === false) {
-						const exportedVariables = getExportedVariables(this.fileInfo.fullPath)
-						if (exportedVariables.length === 0) {
-							// Set `import * as name from "path"` when the file does not export anything
-							name = '* as ' + iden
-
-						} else {
-							// Let the user choose between `import * as name from "path"` or `import { name } from "path"`
-							const selectedName = await vscode.window.showQuickPick(['*', ...exportedVariables])
-
-							if (!selectedName) {
-								return null
-							}
-
-							if (selectedName === '*') {
-								name = '* as ' + iden
-							} else {
-								iden = selectedName
-								name = '{ ' + iden + ' }'
-							}
-						}
-					}
-				}
+			const pattern = await this.getImportPatternForJavaScript(document, existingImports)
+			if (!pattern) {
+				return null
 			}
+
+			const { name, path, kind } = pattern
 
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
@@ -457,27 +364,27 @@ export class FileItem implements Item {
 					// 2) `import * as namespace from "path"`
 					// 3) `import { named } from "path"`
 
-					if (name.startsWith('*')) {
+					if (kind === 'namespace') {
 						if (duplicateImport.node.importClause.name) {
 							// Try merging `* as namespace` with `default`
 							const position = document.positionAt(duplicateImport.node.importClause.name.end)
-							await editor.edit(worker => worker.insert(position, ', ' + name))
+							await editor.edit(worker => worker.insert(position, ', * as ' + name))
 							await JavaScript.fixESLint()
 							return null
 
 						} else {
 							// Try merging `* as namespace` with `* as namespace`
 							// Try merging `* as namespace` with `{ named }`
-							vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+							vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
 							focusAt(duplicateImport.node.importClause.namedBindings, document)
 							return null
 						}
 
-					} else if (name.startsWith('{')) {
+					} else if (kind === 'named') {
 						if (duplicateImport.node.importClause.name) {
 							// Try merging `{ named }` with `default`
 							const position = document.positionAt(duplicateImport.node.importClause.name.end)
-							await editor.edit(worker => worker.insert(position, ', ' + name))
+							await editor.edit(worker => worker.insert(position, ', { ' + name + ' }'))
 							await JavaScript.fixESLint()
 							return null
 
@@ -490,31 +397,31 @@ export class FileItem implements Item {
 
 						} else if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
 							// Try merging `{ named }` with `{ named }`
-							if (duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === iden)) {
-								vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+							if (duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === name)) {
+								vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
 								focusAt(duplicateImport.node, document)
 								return null
 
 							} else {
 								if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
 									const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).end)
-									await editor.edit(worker => worker.insert(position, ', ' + iden))
+									await editor.edit(worker => worker.insert(position, ', ' + name))
 									await JavaScript.fixESLint()
 									return null
 
 								} else {
 									const position = document.positionAt(duplicateImport.node.importClause.namedBindings.end - 1)
-									await editor.edit(worker => worker.insert(position, iden))
+									await editor.edit(worker => worker.insert(position, name))
 									await JavaScript.fixESLint()
 									return null
 								}
 							}
 						}
 
-					} else { // In case of `import default from "path"`
+					} else if (kind === 'default') { // In case of `import default from "path"`
 						if (duplicateImport.node.importClause.name) {
 							// Try merging `default` with `default`
-							vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+							vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
 							focusAt(duplicateImport.node, document)
 							return null
 
@@ -526,45 +433,33 @@ export class FileItem implements Item {
 							await JavaScript.fixESLint()
 							return null
 						}
+
+					} else {
+						// In case of an invalid state
+						return null
 					}
 
 				} else {
-					vscode.window.showInformationMessage(`The module "${iden}" has been already imported.`)
+					vscode.window.showInformationMessage(`The module "${name}" has been already imported.`)
 					focusAt(duplicateImport.node, document)
 					return null
 				}
 			}
 
-			/* const existingVariableHash = _.chain(existingImports)
-				.map(item => {
-					if (ts.isImportDeclaration(item.node)) {
-						return item.node.specifiers.map(spec => [_.get(spec, 'local.name', ''), item])
-					}
-				})
-				.compact()
-				.flatten()
-				.reject(pair => pair[0] === '')
-				.fromPairs()
-				.value()
-			const duplicateVariable = existingVariableHash[iden] as ImportStatementForReadOnly
-			if (duplicateVariable) {
-				const options: Array<vscode.MessageItem> = [
-					{ title: 'Replace It' },
-					{ title: 'Keep Both', isCloseAffordance: true }
-				]
-				const selectedOption = await vscode.window.showWarningMessage(`Do you want to replace the existing "${iden}"?`, { modal: true }, ...options)
-				if (selectedOption === options[0]) {
-					await editor.edit(worker => worker.delete(new vscode.Range(duplicateVariable.start.line - 1, duplicateVariable.start.column, duplicateVariable.end.line - 1, duplicateVariable.end.column)))
-				}
-			} */
+			let clause = name
+			if (kind === 'namespace') {
+				clause = '* as ' + name
+			} else if (kind === 'named') {
+				clause = '{ ' + name + ' }'
+			}
 
-			const snippet = getImportSnippet(name, path, this.options.syntax === 'import', this.options, document)
+			const snippet = getImportSnippet(clause, path, this.options.syntax === 'import', this.options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
 
 		} else if (/^(css|less|sass|scss|styl)$/.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
+			const { path } = this.getNameAndRelativePath(document)
 
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
@@ -578,8 +473,8 @@ export class FileItem implements Item {
 			await JavaScript.fixESLint()
 			return null
 
-		} else {
-			const { path } = this.getNameAndRelativePath(directoryPathOfWorkingDocument)
+		} else { // In case of other file types
+			const { path } = this.getNameAndRelativePath(document)
 			const snippet = getImportSnippet(null, path, false, this.options, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 			await JavaScript.fixESLint()
@@ -600,81 +495,137 @@ export class FileItem implements Item {
 		return fs.existsSync(this.getIndexPath())
 	}
 
-	private getExportedVariablesFromIndexFile() {
-		try {
-			const indexFilePath = this.getIndexPath()
-			const codeTree = JavaScript.parse(fs.readFileSync(this.getIndexPath(), 'utf-8'))
+	private async getImportPatternForJavaScript(document: vscode.TextDocument, existingImports: Array<ImportStatementForReadOnly>): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
+		const { name, path } = this.getNameAndRelativePath(document)
 
-			const importedVariableSourceDict = codeTree.statements
-				.filter(node => ts.isImportDeclaration(node))
-				.reduce((hash, node: ts.ImportDeclaration) => {
-					const relaPath = (node.moduleSpecifier as ts.StringLiteral).text
-					const fullPath = getFilePathWithExtension([this.fileInfo.directoryPath, relaPath], _.trimStart(fp.extname(indexFilePath), '.'))
-
-					if (node.importClause.name) {
-						hash[node.importClause.name.text] = fullPath
-					}
-					if (node.importClause.namedBindings) {
-						if (ts.isNamedImports(node.importClause.namedBindings)) {
-							for (const stub of node.importClause.namedBindings.elements) {
-								hash[stub.name.text] = fullPath
-							}
-						} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
-							hash[node.importClause.namedBindings.name.text] = fullPath
-						}
-					}
-					return hash
-				}, {})
-
-			const exportedVariableList = new Array<string>()
-			const exportedVariableSourceDict = new Map<string, string>()
-			const sourceExportedVariableDict = new Map<string, Array<string>>()
-
-			function save(name: string, path: string) {
-				if (!name || !path) return false
-
-				exportedVariableList.push(name)
-				exportedVariableSourceDict.set(name, path)
-				if (sourceExportedVariableDict.has(path)) {
-					sourceExportedVariableDict.get(path).push(name)
-				} else {
-					sourceExportedVariableDict.set(path, [name])
-				}
+		if (this.options.syntax !== 'import') {
+			return {
+				name,
+				path,
+				kind: 'default',
 			}
-
-			codeTree.forEachChild(node => {
-				if (ts.isExportDeclaration(node)) {
-					if (node.exportClause && ts.isNamedExports(node.exportClause)) {
-						for (const stub of node.exportClause.elements) {
-							const name = stub.name.text
-							const path = node.moduleSpecifier
-								? (node.moduleSpecifier as ts.StringLiteral).text
-								: importedVariableSourceDict[name]
-							save(name, path)
-						}
-
-					} else if (!node.exportClause && node.moduleSpecifier) {
-						const path = getFilePathWithExtension([this.fileInfo.directoryPath, (node.moduleSpecifier as ts.StringLiteral).text], this.fileInfo.fileExtensionWithoutLeadingDot)
-						getExportedVariables(path).forEach(name => {
-							save(name, path)
-						})
-					}
-				}
-			})
-
-			if (this.fileInfo.fileNameWithoutExtension === 'index') {
-				return exportedVariableList
-			}
-
-			if (sourceExportedVariableDict.has(this.fileInfo.fullPath)) {
-				return sourceExportedVariableDict.get(this.fileInfo.fullPath)
-			}
-
-		} catch (ex) {
-			console.error(ex)
 		}
 
-		return []
+		// Try writing import through the index file
+		if (this.hasIndexFile()) {
+			let availableNames: Array<string> = []
+
+			const exportedNamesFromIndexFile = getExportedIdentifiers(this.getIndexPath())
+			if (this.fileInfo.fileNameWithoutExtension === 'index') {
+				availableNames = Array.from(exportedNamesFromIndexFile.keys())
+
+			} else {
+				for (const [name, pathList] of exportedNamesFromIndexFile) {
+					if (pathList.indexOf(this.fileInfo.fullPath) >= 0) {
+						availableNames.push(name)
+					}
+				}
+			}
+
+			const workingDirectory = new FileInfo(document.fileName).directoryPath
+			let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(workingDirectory)
+			if (this.options.indexFile === false) {
+				indexFileRelativePath = fp.dirname(indexFileRelativePath)
+
+			} else if (this.options.fileExtension === false) {
+				indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
+			}
+
+			const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
+			const duplicateImportHasImportedEverything = (
+				duplicateImportForIndexFile &&
+				ts.isImportDeclaration(duplicateImportForIndexFile.node) &&
+				duplicateImportForIndexFile.node.importClause &&
+				ts.isNamespaceImport(duplicateImportForIndexFile.node.importClause.namedBindings)
+			)
+
+			// Stop processing if there is `import * as name from "path"`
+			if (availableNames.length > 0 && duplicateImportHasImportedEverything) {
+				vscode.window.showInformationMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`)
+				focusAt(duplicateImportForIndexFile.node, document)
+				return null
+			}
+
+			if (availableNames.length > 0) {
+				const selectedName = await vscode.window.showQuickPick(_.sortBy(
+					['*', ...availableNames],
+					name => name === 'default' ? '^' : name
+				))
+
+				if (!selectedName) {
+					return null
+				}
+
+				if (selectedName === '*') {
+					return {
+						name: name,
+						path: indexFileRelativePath,
+						kind: 'namespace',
+					}
+
+				} else if (selectedName === 'default') {
+					return {
+						name,
+						path: indexFileRelativePath,
+						kind: 'default',
+					}
+
+				} else {
+					return {
+						name: selectedName,
+						path: indexFileRelativePath,
+						kind: 'named',
+					}
+				}
+			}
+		}
+
+		const exportedVariables = getExportedIdentifiers(this.fileInfo.fullPath)
+		if (exportedVariables.size === 0) {
+			return {
+				name,
+				path,
+				kind: 'namespace',
+			}
+
+		} else if (exportedVariables.size === 1 && exportedVariables[0] === 'default') {
+			return {
+				name,
+				path,
+				kind: 'default',
+			}
+		}
+
+		const selectedName = await vscode.window.showQuickPick(_.sortBy(
+			['*', ...exportedVariables.keys()],
+			name => name === 'default' ? '^' : name
+		))
+
+		if (!selectedName) {
+			return null
+		}
+
+		if (selectedName === '*') {
+			return {
+				name,
+				path,
+				kind: 'namespace',
+			}
+
+		} else if (selectedName === 'default') {
+			return {
+				name,
+				path,
+				kind: 'default',
+			}
+
+		} else {
+			return {
+				name: selectedName,
+				path,
+				kind: 'named',
+			}
+		}
 	}
 }
 
@@ -746,28 +697,7 @@ class NodeItem implements Item {
 	}
 }
 
-export const MODULE_EXPORTS_DEFAULT = {
-	kind: ts.SyntaxKind.ExpressionStatement,
-	expression: {
-		kind: ts.SyntaxKind.BinaryExpression,
-		operatorToken: {
-			kind: ts.SyntaxKind.EqualsToken,
-		},
-		left: {
-			kind: ts.SyntaxKind.PropertyAccessExpression,
-			expression: {
-				kind: ts.SyntaxKind.Identifier,
-				text: 'module',
-			},
-			name: {
-				kind: ts.SyntaxKind.Identifier,
-				text: 'exports',
-			},
-		}
-	}
-}
-
-export const MODULE_REQUIRE_IMMEDIATE = {
+const MODULE_REQUIRE_IMMEDIATE = {
 	kind: ts.SyntaxKind.CallExpression,
 	expression: {
 		kind: ts.SyntaxKind.Identifier,
@@ -780,7 +710,7 @@ export const MODULE_REQUIRE_IMMEDIATE = {
 	]
 }
 
-export const MODULE_REQUIRE = {
+const MODULE_REQUIRE = {
 	kind: ts.SyntaxKind.VariableDeclaration,
 	initializer: MODULE_REQUIRE_IMMEDIATE
 }
@@ -850,7 +780,7 @@ function getVariableName(name: string, options: LanguageOptions) {
 	}
 }
 
-function getImportSnippet(name: string, path: string, useImport: boolean, options: LanguageOptions, document: vscode.TextDocument) {
+function getImportSnippet(clause: string, path: string, useImport: boolean, options: LanguageOptions, document: vscode.TextDocument) {
 	if (options.quoteCharacter === 'single') {
 		path = `'${path}'`
 	} else {
@@ -860,81 +790,148 @@ function getImportSnippet(name: string, path: string, useImport: boolean, option
 	const lineEnding = (options.semiColons ? ';' : '') + (document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n')
 
 	if (useImport) {
-		if (name) {
-			return `import ${name} from ${path}` + lineEnding
+		if (clause) {
+			return `import ${clause} from ${path}` + lineEnding
 		} else {
 			return `import ${path}` + lineEnding
 		}
 
 	} else {
-		if (name) {
-			return `const ${name} = require(${path})` + lineEnding
+		if (clause) {
+			return `const ${clause} = require(${path})` + lineEnding
 		} else {
 			return `require(${path})`
 		}
 	}
 }
 
-function getExportedVariables(filePath: string): Array<string> {
+function getExportedIdentifiers(filePath: string) {
+	const fileDirectory = fp.dirname(filePath)
 	const fileExtension = _.trimStart(fp.extname(filePath), '.')
+
+	const importedNames = new Map<string, Array<string>>()
+	const exportedNames = new Map<string, Array<string>>()
+
 	try {
 		const codeTree = JavaScript.parse(fs.readFileSync(filePath, 'utf-8'))
-		return _.chain(codeTree.statements)
-			.map(node => {
-				if (ts.isExportDeclaration(node)) {
-					if (node.exportClause) {
-						// export { named }
-						return node.exportClause.elements.map(stub => stub.name.text)
+		codeTree.forEachChild(node => {
+			if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+				const path = getFilePathWithExtension([fileDirectory, node.moduleSpecifier.text], fileExtension)
 
-					} else if (node.moduleSpecifier) {
-						// export * from "path"
-						return getExportedVariables(getFilePathWithExtension([filePath, (node.moduleSpecifier as ts.StringLiteral).text], fileExtension))
-					}
-
-				} else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword && node.modifiers[1].kind !== ts.SyntaxKind.DefaultKeyword && node.name) {
-					// export default function () {}
-					// export default class {}
-					return node.name.text
-
-				} else if (ts.isVariableStatement(node) && node.modifiers && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword) {
-					// export const ...
-					return node.declarationList.declarations.map(stub => stub.name.getText())
-
-				} else if (ts.isExportAssignment(node) && ts.isObjectLiteralExpression(node.expression)) {
-					// export default { ... }
-					return node.expression.properties
-						.filter(stub => ts.isPropertyAssignment(stub))
-						.map(stub => stub.name.getText())
-
-				} else if (_.isMatch(node, MODULE_EXPORTS_DEFAULT) && ts.isObjectLiteralExpression(((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right)) {
-					// module.exports = ...
-					return (((node as ts.ExpressionStatement).expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression).properties
-						.filter(stub => ts.isPropertyAssignment(stub))
-						.map(stub => stub.name.getText())
-
-				} else if (
-					ts.isExpressionStatement(node) &&
-					ts.isBinaryExpression(node.expression) &&
-					ts.isPropertyAccessExpression(node.expression.left) &&
-					ts.isPropertyAccessExpression(node.expression.left.expression) &&
-					ts.isIdentifier(node.expression.left.expression.expression) &&
-					node.expression.left.expression.expression.text === 'module' &&
-					ts.isIdentifier(node.expression.left.expression.name) &&
-					node.expression.left.expression.name.text === 'exports'
-				) {
-					// module.exports['...'] = ...
-					return node.expression.left.name.text
+				if (node.importClause.name) {
+					// import named from "path"
+					importedNames.set(node.importClause.name.text, [path])
 				}
-			})
-			.flatten()
-			.compact()
-			.value() as Array<string>
+
+				if (node.importClause.namedBindings) {
+					if (ts.isNamedImports(node.importClause.namedBindings)) {
+						// import { named } from "path"
+						for (const stub of node.importClause.namedBindings.elements) {
+							const name = stub.name.text
+							const pathList: Array<string> = [path]
+							const transitVariables = getExportedIdentifiers(path)
+							if (transitVariables.has(name)) {
+								pathList.push(...transitVariables.get(name))
+							}
+							importedNames.set(name, pathList)
+						}
+
+					} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
+						// import * as namespace from "path"
+						importedNames.set(node.importClause.namedBindings.name.text, [path])
+					}
+				}
+
+			} else if (ts.isExportDeclaration(node)) {
+				const path = node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
+					? getFilePathWithExtension([fileDirectory, node.moduleSpecifier.text], fileExtension)
+					: null
+				if (node.exportClause) {
+					node.exportClause.elements.forEach(stub => {
+						const name = stub.name.text
+						if (path) {
+							// export { named as exported } from "path"
+							exportedNames.set(name, [path])
+
+						} else {
+							// export { named as exported }
+							const pathList = [filePath]
+							if (importedNames.has(name)) {
+								pathList.push(...importedNames.get(name))
+							}
+							exportedNames.set(name, pathList)
+						}
+					})
+
+				} else {
+					// export * from "path"
+					const transitVariables = getExportedIdentifiers(path)
+					transitVariables.forEach((pathList, name) => {
+						exportedNames.set(name, pathList)
+					})
+				}
+
+			} else if (ts.isExportAssignment(node)) {
+				// export default named
+				exportedNames.set('default', [filePath])
+
+			} else if (
+				(ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
+				node.modifiers && node.modifiers.length > 0 && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword
+			) {
+				if (node.modifiers.length > 1 && node.modifiers[1].kind === ts.SyntaxKind.DefaultKeyword) {
+					// export default function () {}
+					// export default function named () {}
+					exportedNames.set('default', [filePath])
+
+				} else if (node.name) {
+					// export function named () {}
+					// export class named {}
+					// export interface named {}
+					// export type named = ...
+					exportedNames.set(node.name.text, [filePath])
+				}
+
+			} else if (
+				ts.isVariableStatement(node) &&
+				node.modifiers && node.modifiers.length > 0 && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword
+			) {
+				// export const ...
+				node.declarationList.declarations.forEach(stub => {
+					if (ts.isIdentifier(stub.name)) {
+						exportedNames.set(stub.name.text, [filePath])
+					}
+				})
+
+			} else if (
+				ts.isExpressionStatement(node) &&
+				ts.isBinaryExpression(node.expression) && node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+				ts.isPropertyAccessExpression(node.expression.left) &&
+				ts.isIdentifier(node.expression.left.expression) && node.expression.left.expression.text === 'module' && node.expression.left.name.text === 'exports' &&
+				ts.isObjectLiteralExpression(node.expression.right)
+			) {
+				// module.exports = { key: value }
+				exportedNames.set('default', [filePath])
+
+			} else if (
+				ts.isExpressionStatement(node) &&
+				ts.isBinaryExpression(node.expression) &&
+				ts.isPropertyAccessExpression(node.expression.left) &&
+				ts.isPropertyAccessExpression(node.expression.left.expression) &&
+				ts.isIdentifier(node.expression.left.expression.expression) &&
+				node.expression.left.expression.expression.text === 'module' &&
+				ts.isIdentifier(node.expression.left.expression.name) &&
+				node.expression.left.expression.name.text === 'exports'
+			) {
+				// module.exports['...'] = ...
+				exportedNames.set(node.expression.left.name.text, [filePath])
+			}
+		})
 
 	} catch (ex) {
 		console.error(ex)
 	}
-
-	return []
+	return exportedNames
 }
 
 function getFilePathWithExtension(pathList: Array<string>, preferredExtension: string) {
