@@ -1,14 +1,23 @@
 ### 2.0.0
+- Fixed zero-file issue for Stylus.
 - Amended interchangeability of JavaScript and TypeScript.
 - Amended identifier resolution in JavaScript and TypeScript.
-- Fixed zero files for Stylus.
+- Amended the settings of JavaScript and TypeScript.
+- Added support of reading `compilerOptions.esModuleInterop` and `compilerOptions.allowJs` from the local [`tsconfig.json`](https://www.typescriptlang.org/docs/handbook/tsconfig-json.html).
+
+|Settings|Possible values|Default value|
+|---|---|---|
+|`codeQuicken.javascript.fileExtension` and `codeQuicken.typescript.fileExtension`|No changes|from `true` to `false`|
+|`codeQuicken.javascript.indexFile`|No changes|from `true` to `false`|
+|`codeQuicken.javascript.quoteCharacter` and `codeQuicken.typescript.quoteCharacter`|from `true`/`false` to `"single"`/`"double"`/`"auto"`|from `true` to `"auto"`|
+|`codeQuicken.javascript.semiColons` and `codeQuicken.typescript.semiColons`|from `true`/`false` to `"always"`/`"never"`/`"auto"`|from `true` to `"auto"`|
 
 ### 1.4.0
 - Amended picking the closest `package.json` from the current active document.
 - Fixed TypeScript compilation errors.
 
 ### 1.3.0
-- Added the separate TypeScript configurations.
+- Added TypeScript settings.
 
 ### 1.2.1
 - Fixed index file path when fixing an import statement.
@@ -17,7 +26,7 @@
 ### 1.2.0
 - Fixed missing file path when fixing an import/require statement.
 - Fixed wrong index file path.
-- Added ability to run ["eslint.executeAutofix"](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) command.
+- Added ability to run [`eslint.executeAutofix`](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) command.
 - Added ability to replace the existing variable.
 
 ### 1.1.1
@@ -33,7 +42,7 @@
 - Amended ability to replace named imports with namespace import in JavaScript.
 
 ### 1.0.0
-- Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript + TypeScript and Stylus languages.
+- Amended the whole extension to only support inserting and fixing `import`/`require` statements in JavaScript, TypeScript, and Stylus languages.
 
 ### 0.0.10
 - Fixed the unexpected reading Node-module require statements.

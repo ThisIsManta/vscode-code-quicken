@@ -71,26 +71,32 @@
                 "codeQuicken.javascript.fileExtension": {
                     "description": "Insert JS/JSX file extension to the path.",
                     "type": "boolean",
-                    "default": true
+                    "default": false
                 },
                 "codeQuicken.javascript.indexFile": {
                     "description": "Insert \"index\" file name with JS/JSX file extension to the path.",
                     "type": "boolean",
-                    "default": true
+                    "default": false
                 },
                 "codeQuicken.javascript.quoteCharacter": {
                     "description": "Insert either single quote or double quote as a string enclosure.",
                     "type": "string",
                     "enum": [
                         "single",
-                        "double"
+                        "double",
+                        "auto"
                     ],
-                    "default": "double"
+                    "default": "auto"
                 },
                 "codeQuicken.javascript.semiColons": {
                     "description": "Insert statement-ending semi-colons.",
-                    "type": "boolean",
-                    "default": true
+                    "type": "string",
+                    "enum": [
+                        "always",
+                        "never",
+                        "auto"
+                    ],
+                    "default": "auto"
                 },
                 "codeQuicken.javascript.predefinedVariableNames": {
                     "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `const bar_123 = require(\"./foo-123.js\");`",
@@ -141,7 +147,7 @@
                 "codeQuicken.typescript.fileExtension": {
                     "description": "Insert JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
-                    "default": true
+                    "default": false
                 },
                 "codeQuicken.typescript.indexFile": {
                     "description": "Insert \"index\" file name with JS/JSX/TS/TSX file extension to the path.",
@@ -153,14 +159,20 @@
                     "type": "string",
                     "enum": [
                         "single",
-                        "double"
+                        "double",
+                        "auto"
                     ],
-                    "default": "double"
+                    "default": "auto"
                 },
                 "codeQuicken.typescript.semiColons": {
                     "description": "Insert statement-ending semi-colons.",
-                    "type": "boolean",
-                    "default": true
+                    "type": "string",
+                    "enum": [
+                        "always",
+                        "never",
+                        "auto"
+                    ],
+                    "default": "auto"
                 },
                 "codeQuicken.typescript.predefinedVariableNames": {
                     "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `const bar_123 = require(\"./foo-123.ts\");`",
