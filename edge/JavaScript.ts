@@ -356,7 +356,7 @@ export class FileItem implements Item {
 
 		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
+			beforeFirstImport = document.positionAt(existingImports[0].node.getStart())
 		}
 
 		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
@@ -379,7 +379,7 @@ export class FileItem implements Item {
 					if (kind === 'namespace') {
 						if (duplicateImport.node.importClause.name) {
 							// Try merging `* as namespace` with `default`
-							const position = document.positionAt(duplicateImport.node.importClause.name.end)
+							const position = document.positionAt(duplicateImport.node.importClause.name.getEnd())
 							await editor.edit(worker => worker.insert(position, ', * as ' + name))
 							await JavaScript.fixESLint()
 							return null
@@ -395,7 +395,7 @@ export class FileItem implements Item {
 					} else if (kind === 'named') {
 						if (duplicateImport.node.importClause.name) {
 							// Try merging `{ named }` with `default`
-							const position = document.positionAt(duplicateImport.node.importClause.name.end)
+							const position = document.positionAt(duplicateImport.node.importClause.name.getEnd())
 							await editor.edit(worker => worker.insert(position, ', { ' + name + ' }'))
 							await JavaScript.fixESLint()
 							return null
@@ -416,13 +416,13 @@ export class FileItem implements Item {
 
 							} else {
 								if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
-									const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).end)
+									const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).getEnd())
 									await editor.edit(worker => worker.insert(position, ', ' + name))
 									await JavaScript.fixESLint()
 									return null
 
 								} else {
-									const position = document.positionAt(duplicateImport.node.importClause.namedBindings.end - 1)
+									const position = document.positionAt(duplicateImport.node.importClause.namedBindings.getEnd() - 1)
 									await editor.edit(worker => worker.insert(position, name))
 									await JavaScript.fixESLint()
 									return null
@@ -440,7 +440,7 @@ export class FileItem implements Item {
 						} else {
 							// Try merging `default` with `* as namespace`
 							// Try merging `default` with `{ named }`
-							const position = document.positionAt(duplicateImport.node.importClause.namedBindings.pos)
+							const position = document.positionAt(duplicateImport.node.importClause.namedBindings.getStart())
 							await editor.edit(worker => worker.insert(position, name + ', '))
 							await JavaScript.fixESLint()
 							return null
@@ -682,7 +682,7 @@ class NodeItem implements Item {
 
 		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
+			beforeFirstImport = document.positionAt(existingImports[0].node.getStart())
 		}
 
 		const clause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
@@ -964,11 +964,11 @@ function findRequireRecursively(node: ts.Node, results: Array<ts.CallExpression>
 	return results
 }
 
-function focusAt(node: { pos: number, end: number }, document: vscode.TextDocument) {
+function focusAt(node: { getStart: () => number, getEnd: () => number }, document: vscode.TextDocument) {
 	vscode.window.activeTextEditor.revealRange(
 		new vscode.Range(
-			document.positionAt(node.pos),
-			document.positionAt(node.end)
+			document.positionAt(node.getStart()),
+			document.positionAt(node.getEnd())
 		),
 		vscode.TextEditorRevealType.InCenterIfOutsideViewport
 	)
