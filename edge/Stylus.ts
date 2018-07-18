@@ -15,6 +15,8 @@ export interface LanguageOptions {
 	semiColons: boolean
 }
 
+const SUPPORTED_LANGUAGE = /^stylus$/
+
 export default class Stylus implements Language {
 	private baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
@@ -38,16 +40,14 @@ export default class Stylus implements Language {
 				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.baseConfig.stylus))
 		}
 
-		let items: Array<Item> = _.chain(this.fileItemCache)
+		return _.chain(this.fileItemCache)
 			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
 			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
-			.value()
-		items = _.sortBy([ // Sort files by their path and name
-			item => item.sortablePath,
-			item => item.sortableName,
-		]) as any as Array<Item>
-
-		return items
+			.sortBy([ // Sort files by their path and name
+				item => item.sortablePath,
+				item => item.sortableName,
+			])
+			.value() as Array<Item>
 	}
 
 	addItem(filePath: string) {
@@ -264,8 +264,6 @@ class FileItem implements Item {
 		}
 	}
 }
-
-const SUPPORTED_LANGUAGE = /^stylus$/
 
 function getExistingImportsAndUrls(node: any, visitedNodes = new Set()) {
 	if (visitedNodes.has(node)) {

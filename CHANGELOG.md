@@ -1,6 +1,7 @@
 ### 2.0.0
 - Amended interchangeability of JavaScript and TypeScript.
 - Amended identifier resolution in JavaScript and TypeScript.
+- Fixed zero files for Stylus.
 
 ### 1.4.0
 - Amended picking the closest `package.json` from the current active document.
