@@ -657,25 +657,6 @@ class NodeItem implements Item {
 	async addImport(editor: vscode.TextEditor) {
 		const document = editor.document
 
-		let name = this.name
-		if (/^typescript(react)?$/.test(document.languageId)) {
-			const tsConfigPaths = await vscode.workspace.findFiles('**/tsconfig.json')
-			const tsConfigPath = _.chain(tsConfigPaths)
-				.map(link => link.fsPath)
-				.sortBy(path => -fp.dirname(path).split(fp.sep).length)
-				.find(path => document.uri.fsPath.startsWith(fp.dirname(path) + fp.sep))
-				.value()
-			let esModuleInterop = false
-			if (tsConfigPath) {
-				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath, 'utf-8'))
-				esModuleInterop = _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
-			}
-
-			if (esModuleInterop === false) {
-				name = `* as ${name}`
-			}
-		}
-
 		const codeTree = JavaScript.parse(document.getText())
 
 		const existingImports = getExistingImports(codeTree)
@@ -686,33 +667,43 @@ class NodeItem implements Item {
 			return null
 		}
 
-		let position = new vscode.Position(0, 0)
+		let beforeFirstImport = new vscode.Position(0, 0)
 		if (existingImports.length > 0) {
-			position = document.positionAt(existingImports[0].node.pos)
+			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
 		}
 
-		const snippet = getImportSnippet(name, this.path, this.options.syntax === 'import', this.options, document)
-		await editor.edit(worker => worker.insert(position, snippet))
+		let clause = this.name
+		if (/^typescript(react)?$/.test(document.languageId)) {
+			const tsConfigPaths = await vscode.workspace.findFiles('**/tsconfig.json')
+			const tsConfigPath = _.chain(tsConfigPaths)
+				.map(link => link.fsPath)
+				.sortBy(path => -fp.dirname(path).split(fp.sep).length)
+				.find(path => document.uri.fsPath.startsWith(fp.dirname(path) + fp.sep))
+				.value()
+			let importDefaultReplacesNamespace = false
+			if (tsConfigPath) {
+				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath, 'utf-8'))
+				importDefaultReplacesNamespace = _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
+			}
+
+			if (importDefaultReplacesNamespace === false) {
+				clause = `* as ${clause}`
+			}
+		}
+
+		const snippet = getImportSnippet(clause, this.path, this.options.syntax === 'import', this.options, document)
+		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 		await JavaScript.fixESLint()
 	}
 }
 
-const MODULE_REQUIRE_IMMEDIATE = {
-	kind: ts.SyntaxKind.CallExpression,
-	expression: {
-		kind: ts.SyntaxKind.Identifier,
-		text: 'require'
-	},
-	arguments: [
-		{
-			kind: ts.SyntaxKind.StringLiteral
+function tryGetPathInRequire(node: ts.Node) {
+	if (node && ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1) {
+		const firstArgument = node.arguments[0]
+		if (ts.isStringLiteral(firstArgument)) {
+			return firstArgument.text
 		}
-	]
-}
-
-const MODULE_REQUIRE = {
-	kind: ts.SyntaxKind.VariableDeclaration,
-	initializer: MODULE_REQUIRE_IMMEDIATE
+	}
 }
 
 interface ImportStatementForReadOnly {
@@ -734,14 +725,14 @@ function getExistingImports(codeTree: ts.SourceFile) {
 			// For `var name = require('...')`
 			//     `var { name } = require('...')`
 			node.declarationList.declarations.forEach(node => {
-				if (_.isMatch(node, MODULE_REQUIRE)) {
-					imports.push({ node, path: _.get(node, 'initializer.arguments.0.text') })
+				if (ts.isVariableDeclaration(node) && node.initializer && tryGetPathInRequire(node.initializer)) {
+					imports.push({ node, path: tryGetPathInRequire(node.initializer) })
 				}
 			})
 
-		} else if (ts.isExpressionStatement(node) && _.isMatch(node.expression, MODULE_REQUIRE_IMMEDIATE)) {
+		} else if (ts.isExpressionStatement(node) && tryGetPathInRequire(node.expression)) {
 			// For `require('...')`
-			imports.push({ node, path: _.get(node, 'expression.arguments.0.text') })
+			imports.push({ node, path: tryGetPathInRequire(node.expression) })
 		}
 	})
 
