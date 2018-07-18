@@ -27,7 +27,7 @@ export default class JavaScript implements Language {
 	private nodeItemCache: Array<NodeItem>
 	private packageWatch: vscode.FileSystemWatcher
 
-	protected supportedLanguage = /^javascript(react)?/
+	protected acceptedLanguage = /^javascript(react)?/
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
@@ -44,12 +44,16 @@ export default class JavaScript implements Language {
 		})
 	}
 
-	protected getLanguageOptions() {
+	getLanguageOptions() {
 		return this.baseConfig.javascript
 	}
 
+	async checkIfImportDefaultIsPreferredOverNamespace() {
+		return true
+	}
+
 	async getItems(document: vscode.TextDocument) {
-		if (this.supportedLanguage.test(document.languageId) === false) {
+		if (this.acceptedLanguage.test(document.languageId) === false) {
 			return null
 		}
 
@@ -59,7 +63,9 @@ export default class JavaScript implements Language {
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
-			this.fileItemCache = fileLinks.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this.getLanguageOptions()))
+			this.fileItemCache = fileLinks
+				.filter(await this.createFileFilter())
+				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this))
 		}
 
 		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
@@ -102,7 +108,7 @@ export default class JavaScript implements Language {
 			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
 				.flatten<string>()
-				.map(name => new NodeItem(name, rootPath, this.getLanguageOptions()))
+				.map(name => new NodeItem(name, rootPath, this))
 				.sortBy(item => item.name)
 				.value()
 		}
@@ -113,7 +119,7 @@ export default class JavaScript implements Language {
 	addItem(filePath: string) {
 		if (this.fileItemCache) {
 			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
-			this.fileItemCache.push(new FileItem(filePath, rootPath, this.getLanguageOptions()))
+			this.fileItemCache.push(new FileItem(filePath, rootPath, this))
 		}
 	}
 
@@ -128,7 +134,7 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (this.supportedLanguage.test(document.languageId) === false) {
+		if (this.acceptedLanguage.test(document.languageId) === false) {
 			return false
 		}
 
@@ -216,7 +222,7 @@ export default class JavaScript implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const { path } = new FileItem(matchingFullPaths[0], rootPath, this.getLanguageOptions()).getNameAndRelativePath(document)
+					const { path } = new FileItem(matchingFullPaths[0], rootPath, this).getNameAndRelativePath(document)
 					worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 				})
 
@@ -239,7 +245,7 @@ export default class JavaScript implements Language {
 			}
 
 			await editor.edit(worker => {
-				const { path } = new FileItem(selectedItem.fullPath, rootPath, this.getLanguageOptions()).getNameAndRelativePath(document)
+				const { path } = new FileItem(selectedItem.fullPath, rootPath, this).getNameAndRelativePath(document)
 				worker.replace(item.editableRange, `${item.quoteChar}${path}${item.quoteChar}`)
 			})
 		}
@@ -256,17 +262,21 @@ export default class JavaScript implements Language {
 		return true
 	}
 
+	reset() {
+		this.fileItemCache = null
+		this.nodeItemCache = null
+		this.packageWatch.dispose()
+	}
+
+	protected async createFileFilter() {
+		return (link: vscode.Uri) => true
+	}
+
 	static async fixESLint() {
 		const commands = await vscode.commands.getCommands()
 		if (commands.indexOf('eslint.executeAutofix') >= 0) {
 			await vscode.commands.executeCommand('eslint.executeAutofix')
 		}
-	}
-
-	reset() {
-		this.fileItemCache = null
-		this.nodeItemCache = null
-		this.packageWatch.dispose()
 	}
 
 	static parse(code: string) {
@@ -281,7 +291,7 @@ export default class JavaScript implements Language {
 }
 
 export class FileItem implements Item {
-	private options: LanguageOptions
+	private language: JavaScript
 	readonly id: string
 	readonly label: string
 	readonly description: string
@@ -289,18 +299,18 @@ export class FileItem implements Item {
 	sortablePath: string
 	sortableName: string
 
-	constructor(filePath: string, rootPath: string, options: LanguageOptions) {
+	constructor(filePath: string, rootPath: string, language: JavaScript) {
 		this.fileInfo = new FileInfo(filePath)
 		this.id = this.fileInfo.fullPath
-		this.options = options
+		this.language = language
 
 		// Set containing directory of the given file
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep).replace(/\\/g, '/')
 
-		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (this.language.getLanguageOptions().indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep).replace(/\\/g, '/')
-		} else if (this.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		} else if (this.language.getLanguageOptions().fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
@@ -317,17 +327,18 @@ export class FileItem implements Item {
 
 	getNameAndRelativePath(workingDocument: vscode.TextDocument) {
 		const workingDirectory = new FileInfo(workingDocument.fileName).directoryPath
-		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.options)
+		const options = this.language.getLanguageOptions()
+		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, options)
 		let path = this.fileInfo.getRelativePath(workingDirectory)
 
-		if (this.options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			// Set the imported variable name to the directory name
-			name = getVariableName(this.fileInfo.directoryName, this.options)
+			name = getVariableName(this.fileInfo.directoryName, options)
 
 			// Remove "/index.js" from the imported path
 			path = fp.dirname(path)
 
-		} else if (this.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		} else if (options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			// Remove file extension from the imported path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 		}
@@ -336,6 +347,7 @@ export class FileItem implements Item {
 	}
 
 	async addImport(editor: vscode.TextEditor) {
+		const options = this.language.getLanguageOptions()
 		const document = editor.document
 
 		const codeTree = JavaScript.parse(document.getText())
@@ -358,7 +370,7 @@ export class FileItem implements Item {
 			const duplicateImport = getDuplicateImport(existingImports, path)
 			if (duplicateImport) {
 				// Try merging the given named import with the existing imports
-				if (this.options.grouping && ts.isImportDeclaration(duplicateImport.node) && duplicateImport.node.importClause) {
+				if (options.grouping && ts.isImportDeclaration(duplicateImport.node) && duplicateImport.node.importClause) {
 					// There are 9 cases as a product of 3 by 3 cases:
 					// 1) `import default from "path"`
 					// 2) `import * as namespace from "path"`
@@ -453,7 +465,7 @@ export class FileItem implements Item {
 				clause = '{ ' + name + ' }'
 			}
 
-			const snippet = getImportSnippet(clause, path, this.options.syntax === 'import', this.options, document)
+			const snippet = getImportSnippet(clause, path, options.syntax === 'import', options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -468,14 +480,14 @@ export class FileItem implements Item {
 				return null
 			}
 
-			const snippet = getImportSnippet(null, path, this.options.syntax === 'import', this.options, document)
+			const snippet = getImportSnippet(null, path, options.syntax === 'import', options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
 
 		} else { // In case of other file types
 			const { path } = this.getNameAndRelativePath(document)
-			const snippet = getImportSnippet(null, path, false, this.options, document)
+			const snippet = getImportSnippet(null, path, false, options, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -496,9 +508,10 @@ export class FileItem implements Item {
 	}
 
 	private async getImportPatternForJavaScript(document: vscode.TextDocument, existingImports: Array<ImportStatementForReadOnly>): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
+		const options = this.language.getLanguageOptions()
 		const { name, path } = this.getNameAndRelativePath(document)
 
-		if (this.options.syntax !== 'import') {
+		if (options.syntax !== 'import') {
 			return {
 				name,
 				path,
@@ -524,10 +537,10 @@ export class FileItem implements Item {
 
 			const workingDirectory = new FileInfo(document.fileName).directoryPath
 			let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(workingDirectory)
-			if (this.options.indexFile === false) {
+			if (options.indexFile === false) {
 				indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-			} else if (this.options.fileExtension === false) {
+			} else if (options.fileExtension === false) {
 				indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
 			}
 
@@ -630,20 +643,19 @@ export class FileItem implements Item {
 }
 
 class NodeItem implements Item {
-	private options: LanguageOptions
+	private language: JavaScript
 	readonly id: string
 	readonly label: string
 	readonly description: string = ''
 	readonly name: string
 	readonly path: string
 
-	constructor(name: string, rootPath: string, options: LanguageOptions) {
+	constructor(name: string, rootPath: string, language: JavaScript) {
 		this.id = 'node://' + name
 		this.label = name
-		this.name = getVariableName(name, options)
+		this.name = getVariableName(name, language.getLanguageOptions())
 		this.path = name
-
-		this.options = options
+		this.language = language
 
 		// Set version of the module as the description
 		try {
@@ -655,6 +667,7 @@ class NodeItem implements Item {
 	}
 
 	async addImport(editor: vscode.TextEditor) {
+		const options = this.language.getLanguageOptions()
 		const document = editor.document
 
 		const codeTree = JavaScript.parse(document.getText())
@@ -672,26 +685,11 @@ class NodeItem implements Item {
 			beforeFirstImport = document.positionAt(existingImports[0].node.pos)
 		}
 
-		let clause = this.name
-		if (/^typescript(react)?$/.test(document.languageId)) {
-			const tsConfigPaths = await vscode.workspace.findFiles('**/tsconfig.json')
-			const tsConfigPath = _.chain(tsConfigPaths)
-				.map(link => link.fsPath)
-				.sortBy(path => -fp.dirname(path).split(fp.sep).length)
-				.find(path => document.uri.fsPath.startsWith(fp.dirname(path) + fp.sep))
-				.value()
-			let importDefaultReplacesNamespace = false
-			if (tsConfigPath) {
-				const tsConfig = JSON.parse(fs.readFileSync(tsConfigPath, 'utf-8'))
-				importDefaultReplacesNamespace = _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
-			}
+		const clause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
+			? this.name
+			: `* as ${this.name}`
 
-			if (importDefaultReplacesNamespace === false) {
-				clause = `* as ${clause}`
-			}
-		}
-
-		const snippet = getImportSnippet(clause, this.path, this.options.syntax === 'import', this.options, document)
+		const snippet = getImportSnippet(clause, this.path, options.syntax === 'import', options, document)
 		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 		await JavaScript.fixESLint()
 	}
