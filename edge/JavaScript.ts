@@ -892,13 +892,24 @@ function getExportedIdentifiers(filePath: string) {
 					node.exportClause.elements.forEach(stub => {
 						const name = stub.name.text
 						if (path) {
-							// export { named as exported } from "path"
-							exportedNames.set(name, [path])
+							const pathList = [path]
+							const transitVariables = getExportedIdentifiers(path)
+							if (stub.propertyName && transitVariables.has(stub.propertyName.text)) {
+								// export { named as exported } from "path"
+								pathList.push(...transitVariables.get(stub.propertyName.text))
+							} else if (transitVariables.has(name)) {
+								// export { named } from "path"
+								pathList.push(...transitVariables.get(name))
+							}
+							exportedNames.set(name, pathList)
 
 						} else {
-							// export { named as exported }
 							const pathList = [filePath]
-							if (importedNames.has(name)) {
+							if (stub.propertyName && importedNames.has(stub.propertyName.text)) {
+								// export { named as exported }
+								pathList.push(...importedNames.get(stub.propertyName.text))
+							} else if (importedNames.has(name)) {
+								// export { named }
 								pathList.push(...importedNames.get(name))
 							}
 							exportedNames.set(name, pathList)
@@ -909,13 +920,17 @@ function getExportedIdentifiers(filePath: string) {
 					// export * from "path"
 					const transitVariables = getExportedIdentifiers(path)
 					transitVariables.forEach((pathList, name) => {
-						exportedNames.set(name, pathList)
+						exportedNames.set(name, [filePath, ...pathList])
 					})
 				}
 
 			} else if (ts.isExportAssignment(node)) {
 				// export default named
-				exportedNames.set('default', [filePath])
+				const pathList = [filePath]
+				if (ts.isIdentifier(node.expression) && importedNames.has(node.expression.text)) {
+					pathList.push(...importedNames.get(node.expression.text))
+				}
+				exportedNames.set('default', pathList)
 
 			} else if (
 				(ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
@@ -938,7 +953,7 @@ function getExportedIdentifiers(filePath: string) {
 				ts.isVariableStatement(node) &&
 				node.modifiers && node.modifiers.length > 0 && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword
 			) {
-				// export const ...
+				// export const named = ...
 				node.declarationList.declarations.forEach(stub => {
 					if (ts.isIdentifier(stub.name)) {
 						exportedNames.set(stub.name.text, [filePath])
@@ -953,7 +968,11 @@ function getExportedIdentifiers(filePath: string) {
 				ts.isObjectLiteralExpression(node.expression.right)
 			) {
 				// module.exports = { key: value }
-				exportedNames.set('default', [filePath])
+				const pathList = [filePath]
+				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
+					pathList.push(...importedNames.get(node.expression.right.text))
+				}
+				exportedNames.set('default', pathList)
 
 			} else if (
 				ts.isExpressionStatement(node) &&
@@ -965,8 +984,12 @@ function getExportedIdentifiers(filePath: string) {
 				ts.isIdentifier(node.expression.left.expression.name) &&
 				node.expression.left.expression.name.text === 'exports'
 			) {
-				// module.exports['...'] = ...
-				exportedNames.set(node.expression.left.name.text, [filePath])
+				// module.exports.named = ...
+				const pathList = [filePath]
+				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
+					pathList.push(...importedNames.get(node.expression.right.text))
+				}
+				exportedNames.set(node.expression.left.name.text, pathList)
 			}
 		})
 
@@ -976,7 +999,7 @@ function getExportedIdentifiers(filePath: string) {
 	return exportedNames
 }
 
-function getFilePath(pathList: Array<string>, preferredExtension: string) {
+function getFilePath(pathList: Array<string>, preferredExtension: string): string {
 	const filePath = fp.resolve(...pathList)
 
 	if (fs.existsSync(filePath)) {
