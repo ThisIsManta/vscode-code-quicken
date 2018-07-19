@@ -108,6 +108,7 @@ export default class JavaScript implements Language {
 			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
 				.flatten<string>()
+				.reject(name => name.startsWith('@types/'))
 				.map(name => new NodeItem(name, rootPath, this))
 				.sortBy(item => item.name)
 				.value()

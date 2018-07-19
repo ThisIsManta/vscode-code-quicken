@@ -3,6 +3,7 @@
 - Amended interchangeability of JavaScript and TypeScript.
 - Amended identifier resolution in JavaScript and TypeScript.
 - Amended the settings of JavaScript and TypeScript.
+- Removed `@types` modules from the import/require list for JavaScript and TypeScript.
 - Added support of reading `compilerOptions.esModuleInterop` and `compilerOptions.allowJs` from the local [`tsconfig.json`](https://www.typescriptlang.org/docs/handbook/tsconfig-json.html).
 
 |Settings|Possible values|Default value|
