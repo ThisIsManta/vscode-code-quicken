@@ -178,7 +178,7 @@ export default class JavaScript implements Language {
 			}
 		}
 
-		const codeTree = JavaScript.parse(document.getText())
+		const codeTree = JavaScript.parse(document)
 
 		const totalImports = _.flatten([
 			codeTree.statements
@@ -271,15 +271,17 @@ export default class JavaScript implements Language {
 	}
 
 	static async fixESLint() {
-		const commands = await vscode.commands.getCommands()
+		const commands = await vscode.commands.getCommands(true)
 		if (commands.indexOf('eslint.executeAutofix') >= 0) {
 			await vscode.commands.executeCommand('eslint.executeAutofix')
 		}
 	}
 
-	static parse(code: string) {
+	static parse(documentOrFilePath: vscode.TextDocument | string) {
 		try {
-			return ts.createSourceFile('nada', code, ts.ScriptTarget.ESNext, true)
+			const filePath = typeof documentOrFilePath === 'string' ? documentOrFilePath : documentOrFilePath.fileName
+			const codeText = typeof documentOrFilePath === 'string' ? fs.readFileSync(filePath, 'utf-8') : documentOrFilePath.getText()
+			return ts.createSourceFile('file', codeText, ts.ScriptTarget.ESNext, true)
 
 		} catch (ex) {
 			console.error(ex)
@@ -348,7 +350,7 @@ export class FileItem implements Item {
 		const options = this.language.getLanguageOptions()
 		const document = editor.document
 
-		const codeTree = JavaScript.parse(document.getText())
+		const codeTree = JavaScript.parse(document)
 
 		const existingImports = getExistingImports(codeTree)
 
@@ -661,7 +663,7 @@ class NodeItem implements Item {
 		const options = this.language.getLanguageOptions()
 		const document = editor.document
 
-		const codeTree = JavaScript.parse(document.getText())
+		const codeTree = JavaScript.parse(document)
 
 		const existingImports = getExistingImports(codeTree)
 		const duplicateImport = existingImports.find(item => item.path === this.path)
@@ -778,7 +780,7 @@ async function matchNearbyFiles<T>(document: vscode.TextDocument, matcher: (file
 }
 
 async function getQuoteCharacter(documentOrFilePath: vscode.TextDocument | string): Promise<string> {
-	const codeTree = JavaScript.parse(typeof documentOrFilePath === 'string' ? fs.readFileSync(documentOrFilePath, 'utf-8') : documentOrFilePath.getText())
+	const codeTree = JavaScript.parse(documentOrFilePath)
 	const chars = findNodesRecursively<ts.StringLiteral>(codeTree, node => ts.isStringLiteral(node)).map(node => node.getText().trim().charAt(0))
 	if (chars.length > 0) {
 		const singleQuoteCount = chars.filter(char => char === "'").length
@@ -800,7 +802,7 @@ async function getQuoteCharacter(documentOrFilePath: vscode.TextDocument | strin
 }
 
 async function hasSemiColon(documentOrFilePath: vscode.TextDocument | string): Promise<boolean> {
-	const codeTree = JavaScript.parse(typeof documentOrFilePath === 'string' ? fs.readFileSync(documentOrFilePath, 'utf-8') : documentOrFilePath.getText())
+	const codeTree = JavaScript.parse(documentOrFilePath)
 	const statements = _.chain([codeTree, ...findNodesRecursively<ts.Block>(codeTree, node => ts.isBlock(node))])
 		.map(block => Array.from(block.statements))
 		.flatten()
@@ -853,7 +855,7 @@ function getExportedIdentifiers(filePath: string) {
 	const exportedNames = new Map<string, Array<string>>()
 
 	try {
-		const codeTree = JavaScript.parse(fs.readFileSync(filePath, 'utf-8'))
+		const codeTree = JavaScript.parse(filePath)
 		codeTree.forEachChild(node => {
 			if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
 				const path = getFilePathWithExtension([fileDirectory, node.moduleSpecifier.text], fileExtension)
@@ -1043,7 +1045,7 @@ function getLocalModuleVersion(name: string, rootPath: string) {
 
 function getNodeJsAPIs(rootPath: string) {
 	try {
-		const codeTree = JavaScript.parse(fs.readFileSync(fp.join(rootPath, 'node_modules', '@types/node', 'index.d.ts'), 'utf-8'))
+		const codeTree = JavaScript.parse(fp.join(rootPath, 'node_modules', '@types/node', 'index.d.ts'))
 		return _.compact(codeTree.statements.map(node => {
 			if (
 				ts.isModuleDeclaration(node) &&
