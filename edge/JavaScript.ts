@@ -105,11 +105,21 @@ export default class JavaScript implements Language {
 				packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
 			}
 
-			this.nodeItemCache = _.chain([packageJson.devDependencies, packageJson.dependencies])
+			const dependencies = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
-				.flatten<string>()
+				.flatten()
+				.value()
+
+			let nodeJsAPIs: Array<NodeItem> = []
+			if (dependencies.some(name => name === '@types/node')) {
+				const nodeJsVersion = getLocalModuleVersion('@types/node', rootPath)
+				nodeJsAPIs = getNodeJsAPIs(rootPath).map(name => new NodeItem(name, nodeJsVersion, this))
+			}
+
+			this.nodeItemCache = _.chain(dependencies)
 				.reject(name => name.startsWith('@types/'))
-				.map(name => new NodeItem(name, rootPath, this))
+				.map(name => new NodeItem(name, getLocalModuleVersion(name, rootPath), this))
+				.concat(nodeJsAPIs)
 				.sortBy(item => item.name)
 				.value()
 		}
@@ -647,24 +657,17 @@ class NodeItem implements Item {
 	private language: JavaScript
 	readonly id: string
 	readonly label: string
-	readonly description: string = ''
+	readonly description: string
 	readonly name: string
 	readonly path: string
 
-	constructor(name: string, rootPath: string, language: JavaScript) {
+	constructor(name: string, version: string, language: JavaScript) {
 		this.id = 'node://' + name
 		this.label = name
+		this.description = version ? 'v' + version : ''
 		this.name = getVariableName(name, language.getLanguageOptions())
 		this.path = name
 		this.language = language
-
-		// Set version of the module as the description
-		try {
-			const packageJson = require(fp.join(rootPath, 'node_modules', name, 'package.json'))
-			if (packageJson.version) {
-				this.description = 'v' + packageJson.version
-			}
-		} catch (ex) { }
 	}
 
 	async addImport(editor: vscode.TextEditor) {
@@ -1037,4 +1040,37 @@ function focusAt(node: { getStart: () => number, getEnd: () => number }, documen
 		),
 		vscode.TextEditorRevealType.InCenterIfOutsideViewport
 	)
+}
+
+function getLocalModuleVersion(name: string, rootPath: string) {
+	try {
+		const packageJson = JSON.parse(fs.readFileSync(fp.join(rootPath, 'node_modules', name, 'package.json'), 'utf-8'))
+		if (packageJson.version) {
+			return packageJson.version as string
+		}
+	} catch (ex) {
+		// Do nothing
+	}
+	return null
+}
+
+function getNodeJsAPIs(rootPath: string) {
+	try {
+		const codeTree = JavaScript.parse(fs.readFileSync(fp.join(rootPath, 'node_modules', '@types/node', 'index.d.ts'), 'utf-8'))
+		return _.compact(codeTree.statements.map(node => {
+			if (
+				ts.isModuleDeclaration(node) &&
+				node.modifiers && node.modifiers.length > 0 &&
+				node.modifiers[0].kind === ts.SyntaxKind.DeclareKeyword &&
+				(ts.isStringLiteral(node.name) || ts.isIdentifier(node.name))
+			) {
+				// declare module "name" { ... }
+				return node.name.text
+			}
+		}))
+
+	} catch (ex) {
+		console.error(ex)
+	}
+	return []
 }
