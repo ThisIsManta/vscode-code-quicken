@@ -500,7 +500,7 @@ export class FileItem implements Item {
 	}
 
 	private getIndexPath() {
-		return getFilePathWithExtension([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
+		return getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
 	}
 
 	private hasIndexFile() {
@@ -857,8 +857,8 @@ function getExportedIdentifiers(filePath: string) {
 	try {
 		const codeTree = JavaScript.parse(filePath)
 		codeTree.forEachChild(node => {
-			if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-				const path = getFilePathWithExtension([fileDirectory, node.moduleSpecifier.text], fileExtension)
+			if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.importClause) {
+				const path = getFilePath([fileDirectory, node.moduleSpecifier.text], fileExtension)
 
 				if (node.importClause.name) {
 					// import named from "path"
@@ -886,7 +886,7 @@ function getExportedIdentifiers(filePath: string) {
 
 			} else if (ts.isExportDeclaration(node)) {
 				const path = node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
-					? getFilePathWithExtension([fileDirectory, node.moduleSpecifier.text], fileExtension)
+					? getFilePath([fileDirectory, node.moduleSpecifier.text], fileExtension)
 					: null
 				if (node.exportClause) {
 					node.exportClause.elements.forEach(stub => {
@@ -976,16 +976,24 @@ function getExportedIdentifiers(filePath: string) {
 	return exportedNames
 }
 
-function getFilePathWithExtension(pathList: Array<string>, preferredExtension: string) {
+function getFilePath(pathList: Array<string>, preferredExtension: string) {
 	const filePath = fp.resolve(...pathList)
 
-	if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile) {
-		return filePath
+	if (fs.existsSync(filePath)) {
+		const fileStat = fs.lstatSync(filePath)
+		if (fileStat.isFile()) {
+			return filePath
+
+		} else if (fileStat.isDirectory()) {
+			return getFilePath([...pathList, 'index'], preferredExtension)
+		}
 	}
 
-	for (const extension of _.uniq([preferredExtension.toLowerCase(), 'tsx', 'ts', 'jsx', 'js'])) {
-		if (fs.existsSync(filePath + '.' + extension)) {
-			return filePath + '.' + extension
+	const possibleExtensions = _.uniq([preferredExtension.toLowerCase(), 'tsx', 'ts', 'jsx', 'js'])
+	for (const extension of possibleExtensions) {
+		const fullPath = filePath + '.' + extension
+		if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
+			return fullPath
 		}
 	}
 
