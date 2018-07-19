@@ -25,23 +25,11 @@ export default class JavaScript implements Language {
 	protected baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
-	private packageWatch: vscode.FileSystemWatcher
 
 	protected acceptedLanguage = /^javascript(react)?/
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
-
-		this.packageWatch = vscode.workspace.createFileSystemWatcher('**/package.json')
-		this.packageWatch.onDidCreate(() => {
-			this.nodeItemCache = null
-		})
-		this.packageWatch.onDidChange(() => {
-			this.nodeItemCache = null
-		})
-		this.packageWatch.onDidDelete(() => {
-			this.nodeItemCache = null
-		})
 	}
 
 	getLanguageOptions() {
@@ -276,7 +264,6 @@ export default class JavaScript implements Language {
 	reset() {
 		this.fileItemCache = null
 		this.nodeItemCache = null
-		this.packageWatch.dispose()
 	}
 
 	protected async createFileFilter() {
