@@ -497,14 +497,6 @@ export class FileItem implements Item {
 		return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
 	}
 
-	private getIndexPath() {
-		return getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
-	}
-
-	private hasIndexFile() {
-		return fs.existsSync(this.getIndexPath())
-	}
-
 	private async getImportPatternForJavaScript(document: vscode.TextDocument, existingImports: Array<ImportStatementForReadOnly>): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
 		const options = this.language.getLanguageOptions()
 		const { name, path } = this.getNameAndRelativePath(document)
@@ -518,10 +510,11 @@ export class FileItem implements Item {
 		}
 
 		// Try writing import through the index file
-		if (this.hasIndexFile()) {
+		const indexFilePath = getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
+		if (indexFilePath) {
 			let availableNames: Array<string> = []
 
-			const exportedNamesFromIndexFile = getExportedIdentifiers(this.getIndexPath())
+			const exportedNamesFromIndexFile = getExportedIdentifiers(indexFilePath)
 			if (this.fileInfo.fileNameWithoutExtension === 'index') {
 				availableNames = Array.from(exportedNamesFromIndexFile.keys())
 
@@ -534,7 +527,7 @@ export class FileItem implements Item {
 			}
 
 			const workingDirectory = new FileInfo(document.fileName).directoryPath
-			let indexFileRelativePath = new FileInfo(this.getIndexPath()).getRelativePath(workingDirectory)
+			let indexFileRelativePath = new FileInfo(indexFilePath).getRelativePath(workingDirectory)
 			if (options.indexFile === false) {
 				indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
@@ -856,7 +849,14 @@ function getExportedIdentifiers(filePath: string) {
 		const codeTree = JavaScript.parse(filePath)
 		codeTree.forEachChild(node => {
 			if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.importClause) {
+				if (/^[\.\/]/.test(node.moduleSpecifier.text) === false) {
+					return
+				}
+
 				const path = getFilePath([fileDirectory, node.moduleSpecifier.text], fileExtension)
+				if (path === undefined) {
+					return
+				}
 
 				if (node.importClause.name) {
 					// import named from "path"
@@ -883,9 +883,9 @@ function getExportedIdentifiers(filePath: string) {
 				}
 
 			} else if (ts.isExportDeclaration(node)) {
-				const path = node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
-					? getFilePath([fileDirectory, node.moduleSpecifier.text], fileExtension)
-					: null
+				const path = node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) &&
+					getFilePath([fileDirectory, node.moduleSpecifier.text], fileExtension)
+
 				if (node.exportClause) {
 					node.exportClause.elements.forEach(stub => {
 						const name = stub.name.text
@@ -1017,8 +1017,6 @@ function getFilePath(pathList: Array<string>, preferredExtension: string): strin
 			return fullPath
 		}
 	}
-
-	return filePath + '.' + preferredExtension
 }
 
 function getDuplicateImport(existingImports: Array<ImportStatementForReadOnly>, path: string) {
