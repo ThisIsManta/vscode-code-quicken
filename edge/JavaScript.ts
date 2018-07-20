@@ -593,7 +593,7 @@ export class FileItem implements Item {
 				kind: 'namespace',
 			}
 
-		} else if (exportedVariables.size === 1 && exportedVariables[0] === 'default') {
+		} else if (exportedVariables.size === 1 && exportedVariables.has('default')) {
 			return {
 				name,
 				path,
