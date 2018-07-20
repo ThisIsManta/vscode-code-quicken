@@ -174,7 +174,7 @@ export default class JavaScript implements Language {
 
 			constructor(fullPath: string) {
 				this.fullPath = fullPath
-				this.label = fullPath.substring(rootPath.length).replace(/\\/g, '/')
+				this.label = fullPath.substring(rootPath.length)
 			}
 		}
 
@@ -304,16 +304,14 @@ export class FileItem implements Item {
 		this.id = this.fileInfo.fullPath
 		this.language = language
 
-		// Set containing directory of the given file
-		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep).replace(/\\/g, '/')
+		this.label = this.fileInfo.fileNameWithExtension
+		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
-		if (this.language.getLanguageOptions().indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (this.language.getLanguageOptions().indexFile === false && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
-			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep).replace(/\\/g, '/')
+			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.language.getLanguageOptions().fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
-		} else {
-			this.label = this.fileInfo.fileNameWithExtension
 		}
 
 		// Set sorting rank according to the file name
