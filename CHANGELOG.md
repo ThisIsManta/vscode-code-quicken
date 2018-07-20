@@ -1,6 +1,7 @@
 ### 2.0.0
 - Added support of Node.js built-in APIs.
 - Added support of reading `compilerOptions.esModuleInterop` and `compilerOptions.allowJs` from the local [`tsconfig.json`](https://www.typescriptlang.org/docs/handbook/tsconfig-json.html).
+- Added progress to the status bar while populating files.
 - Fixed zero-file issue for Stylus.
 - Amended better support of JavaScript and TypeScript.
 - Amended the settings of JavaScript and TypeScript.

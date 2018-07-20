@@ -50,31 +50,44 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
-        for (let lang of languages) {
-            let items = await lang.getItems(document)
-            if (items !== null) {
-                // Stop processing if the active editor has been changed
-                if (editor !== vscode.window.activeTextEditor) {
-                    return null
-                }
-
-                items = localStorage.recentSelectedItems.sort(lang, items) as Array<Item>
-
-                // Show VS Code picker
-                const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' })
-
-                // Stop processing if the user does not select anything
-                if (!selectedItem) {
-                    return null
-                }
-
-                localStorage.recentSelectedItems.markAsRecentlyUsed(lang, selectedItem)
-
-                // Insert the snippet
-                await selectedItem.addImport(editor)
-
-                break
+        let progressWillShow = true
+        let stopProgress = () => { progressWillShow = false }
+        setTimeout(() => {
+            if (!progressWillShow) {
+                return
             }
+            vscode.window.withProgress({ title: 'Populating files...', location: vscode.ProgressLocation.Window }, async () => {
+                await new Promise(resolve => {
+                    stopProgress = resolve
+                })
+            })
+        }, 150)
+
+        for (let language of languages) {
+            let items = await language.getItems(document)
+            if (!items) {
+                continue
+            }
+
+            // Stop processing if the active editor has been changed
+            if (editor !== vscode.window.activeTextEditor) {
+                stopProgress()
+                return null
+            }
+
+            items = localStorage.recentSelectedItems.sort(language, items) as Array<Item>
+
+            stopProgress()
+
+            const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' })
+            if (!selectedItem) {
+                return null
+            }
+
+            localStorage.recentSelectedItems.markAsRecentlyUsed(language, selectedItem)
+
+            // Insert the snippet
+            await selectedItem.addImport(editor)
         }
     }))
 
