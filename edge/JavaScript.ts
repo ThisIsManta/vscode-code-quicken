@@ -323,21 +323,23 @@ export class FileItem implements Item {
 		}
 	}
 
-	getNameAndRelativePath(workingDocument: vscode.TextDocument) {
-		const workingDirectory = new FileInfo(workingDocument.fileName).directoryPath
+	getNameAndRelativePath(document: vscode.TextDocument) {
+		const workingDirectory = new FileInfo(document.fileName).directoryPath
 		const options = this.language.getLanguageOptions()
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, options)
 		let path = this.fileInfo.getRelativePath(workingDirectory)
 
-		if (options.indexFile && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
-			// Set the imported variable name to the directory name
+		if (this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+			// Set the identifier as the directory name
 			name = getVariableName(this.fileInfo.directoryName, options)
+		}
 
-			// Remove "/index.js" from the imported path
+		if (options.indexFile === false) {
+			// Remove "/index.js" from the path
 			path = fp.dirname(path)
 
 		} else if (options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			// Remove file extension from the imported path only if it matches the working document
+			// Remove file extension from the path only if it matches the working document
 			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
 		}
 
@@ -358,7 +360,7 @@ export class FileItem implements Item {
 		}
 
 		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			const pattern = await this.getImportPatternForJavaScript(document, existingImports)
+			const pattern = await this.getImportPatternForJavaScript(existingImports, document)
 			if (!pattern) {
 				return null
 			}
@@ -457,14 +459,14 @@ export class FileItem implements Item {
 				}
 			}
 
-			let clause = name
+			let importClause = name
 			if (kind === 'namespace') {
-				clause = '* as ' + name
+				importClause = '* as ' + name
 			} else if (kind === 'named') {
-				clause = '{ ' + name + ' }'
+				importClause = '{ ' + name + ' }'
 			}
 
-			const snippet = await getImportSnippet(clause, path, options, document)
+			const snippet = await getImportOrRequireSnippet(name, importClause, path, options, codeTree, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -479,14 +481,14 @@ export class FileItem implements Item {
 				return null
 			}
 
-			const snippet = await getImportSnippet(null, path, options, document)
+			const snippet = await getImportOrRequireSnippet(null, null, path, options, codeTree, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
 
 		} else { // In case of other file types
 			const { path } = this.getNameAndRelativePath(document)
-			const snippet = await getImportSnippet(null, path, { ...options, syntax: 'require' }, document)
+			const snippet = await getImportOrRequireSnippet(null, null, path, { ...options, syntax: 'require' }, codeTree, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -498,11 +500,11 @@ export class FileItem implements Item {
 		return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
 	}
 
-	private async getImportPatternForJavaScript(document: vscode.TextDocument, existingImports: Array<ImportStatementForReadOnly>): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
+	private async getImportPatternForJavaScript(existingImports: Array<ImportStatementForReadOnly>, document: vscode.TextDocument): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
 		const options = this.language.getLanguageOptions()
 		const { name, path } = this.getNameAndRelativePath(document)
 
-		if (options.syntax !== 'import') {
+		if (options.syntax === 'require') {
 			return {
 				name,
 				path,
@@ -554,7 +556,7 @@ export class FileItem implements Item {
 			if (availableNames.length > 0) {
 				const selectedName = await vscode.window.showQuickPick(_.sortBy(
 					['*', ...availableNames],
-					name => name === 'default' ? '^' : name
+					name => name === 'default' ? '+' : name // Note that '+' comes after '*'
 				))
 
 				if (!selectedName) {
@@ -603,7 +605,7 @@ export class FileItem implements Item {
 
 		const selectedName = await vscode.window.showQuickPick(_.sortBy(
 			['*', ...exportedVariables.keys()],
-			name => name === 'default' ? '^' : name
+			name => name === 'default' ? '+' : name // Note that '+' comes after '*'
 		))
 
 		if (!selectedName) {
@@ -670,11 +672,11 @@ class NodeItem implements Item {
 			beforeFirstImport = document.positionAt(existingImports[0].node.getStart())
 		}
 
-		const clause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
+		const importClause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
 			? this.name
 			: `* as ${this.name}`
 
-		const snippet = await getImportSnippet(clause, this.path, options, document)
+		const snippet = await getImportOrRequireSnippet(this.name, importClause, this.path, options, codeTree, document)
 		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 		await JavaScript.fixESLint()
 	}
@@ -835,9 +837,7 @@ async function hasImportSyntax(codeTree: ts.SourceFile, stopPropagation?: boolea
 	return matchNearbyFiles(codeTree.fileName, hasImportSyntax)
 }
 
-async function getImportSnippet(clause: string, path: string, options: LanguageOptions, document: vscode.TextDocument) {
-	const codeTree = JavaScript.parse(document)
-
+async function getImportOrRequireSnippet(identifier: string, importClause: string, path: string, options: LanguageOptions, codeTree: ts.SourceFile, document: vscode.TextDocument) {
 	let quote = "'"
 	if (options.quoteCharacter === 'double') {
 		quote = '"'
@@ -850,15 +850,15 @@ async function getImportSnippet(clause: string, path: string, options: LanguageO
 	const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
 
 	if (options.syntax === 'import' || options.syntax === 'auto' && await hasImportSyntax(codeTree)) {
-		if (clause) {
-			return `import ${clause} from ${quote}${path}${quote}` + statementEnding + lineEnding
+		if (importClause) {
+			return `import ${importClause} from ${quote}${path}${quote}` + statementEnding + lineEnding
 		} else {
 			return `import ${quote}${path}${quote}` + statementEnding + lineEnding
 		}
 
 	} else {
-		if (clause) {
-			return `const ${clause} = require(${quote}${path}${quote})` + statementEnding + lineEnding
+		if (identifier) {
+			return `const ${identifier} = require(${quote}${path}${quote})` + statementEnding + lineEnding
 		} else {
 			return `require(${quote}${path}${quote})`
 		}
