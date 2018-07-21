@@ -1,3 +1,7 @@
+### 2.1.1
+- Amended importing internal files instead of index files for JavaScript and TypeScript.
+- Fixed missing require index path for JavaScript and TypeScript.
+
 ### 2.1.0
 - Added original export path and code preview to the import/require list for JavaScript and TypeScript.
 - Added variable assignments for JSON files.

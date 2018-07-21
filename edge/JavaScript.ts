@@ -499,19 +499,12 @@ export class FileItem implements Item {
 	private async getImportPatternForJavaScript(existingImports: Array<ImportStatementForReadOnly>, document: vscode.TextDocument): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
 		const options = this.language.getLanguageOptions()
 		const workspaceDirectory = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
+		const workingDirectory = fp.dirname(document.fileName)
 		const { name, path } = this.getNameAndRelativePath(document)
-
-		if (options.syntax === 'require') {
-			return {
-				name,
-				path,
-				kind: 'default',
-			}
-		}
 
 		// Try writing import through the index file
 		const indexFilePath = getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
-		if (indexFilePath) {
+		if (indexFilePath && indexFilePath.startsWith(workingDirectory) === false) {
 			const pickers: Array<vscode.QuickPickItem> = []
 
 			const exportedIdentifiersFromIndexFile = getExportedIdentifiers(indexFilePath)
@@ -528,7 +521,6 @@ export class FileItem implements Item {
 				})
 			}
 
-			const workingDirectory = new FileInfo(document.fileName).directoryPath
 			let indexFileRelativePath = new FileInfo(indexFilePath).getRelativePath(workingDirectory)
 			if (options.indexFile === false) {
 				indexFileRelativePath = fp.dirname(indexFileRelativePath)
@@ -550,6 +542,14 @@ export class FileItem implements Item {
 				vscode.window.showErrorMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`, { modal: true })
 				focusAt(duplicateImportForIndexFile.node, document)
 				return null
+			}
+
+			if (options.syntax === 'require') {
+				return {
+					name,
+					path: indexFileRelativePath,
+					kind: 'default',
+				}
 			}
 
 			if (pickers.length > 0) {
@@ -583,6 +583,14 @@ export class FileItem implements Item {
 						kind: 'named',
 					}
 				}
+			}
+		}
+
+		if (options.syntax === 'require') {
+			return {
+				name,
+				path,
+				kind: 'default',
 			}
 		}
 
