@@ -307,7 +307,7 @@ export class FileItem implements Item {
 		this.label = this.fileInfo.fileNameWithExtension
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
-		if (this.language.getLanguageOptions().indexFile === false && this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (this.language.getLanguageOptions().indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.language.getLanguageOptions().fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
@@ -315,7 +315,7 @@ export class FileItem implements Item {
 		}
 
 		// Set sorting rank according to the file name
-		if (this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			// Make index file appear on the top of its directory
 			this.sortableName = '!'
 		} else {
@@ -329,7 +329,7 @@ export class FileItem implements Item {
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, options)
 		let path = this.fileInfo.getRelativePath(workingDirectory)
 
-		if (this.checkIfIndexPath(this.fileInfo.fileNameWithExtension)) {
+		if (checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			// Set the identifier as the directory name
 			name = getVariableName(this.fileInfo.directoryName, options)
 		}
@@ -377,18 +377,18 @@ export class FileItem implements Item {
 					// 3) `import { named } from "path"`
 
 					if (kind === 'namespace') {
-						if (duplicateImport.node.importClause.name) {
-							// Try merging `* as namespace` with `default`
-							const position = document.positionAt(duplicateImport.node.importClause.name.getEnd())
-							await editor.edit(worker => worker.insert(position, ', * as ' + name))
-							await JavaScript.fixESLint()
-							return null
-
-						} else {
+						if (duplicateImport.node.importClause.namedBindings) {
 							// Try merging `* as namespace` with `* as namespace`
 							// Try merging `* as namespace` with `{ named }`
 							vscode.window.showErrorMessage(`The module "${name}" has been already imported.`, { modal: true })
 							focusAt(duplicateImport.node.importClause.namedBindings, document)
+							return null
+
+						} else {
+							// Try merging `* as namespace` with `default`
+							const position = document.positionAt(duplicateImport.node.importClause.name.getEnd())
+							await editor.edit(worker => worker.insert(position, ', * as ' + name))
+							await JavaScript.fixESLint()
 							return null
 						}
 
@@ -495,13 +495,9 @@ export class FileItem implements Item {
 		}
 	}
 
-	private checkIfIndexPath(fileNameWithExtension: string) {
-		const parts = fileNameWithExtension.split('.')
-		return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
-	}
-
 	private async getImportPatternForJavaScript(existingImports: Array<ImportStatementForReadOnly>, document: vscode.TextDocument): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
 		const options = this.language.getLanguageOptions()
+		const workspaceDirectory = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 		const { name, path } = this.getNameAndRelativePath(document)
 
 		if (options.syntax === 'require') {
@@ -515,18 +511,20 @@ export class FileItem implements Item {
 		// Try writing import through the index file
 		const indexFilePath = getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
 		if (indexFilePath) {
-			let availableNames: Array<string> = []
+			const pickers: Array<vscode.QuickPickItem> = []
 
-			const exportedNamesFromIndexFile = getExportedIdentifiers(indexFilePath)
-			if (this.fileInfo.fileNameWithoutExtension === 'index') {
-				availableNames = Array.from(exportedNamesFromIndexFile.keys())
-
-			} else {
-				for (const [name, pathList] of exportedNamesFromIndexFile) {
-					if (pathList.indexOf(this.fileInfo.fullPath) >= 0) {
-						availableNames.push(name)
-					}
+			const exportedIdentifiersFromIndexFile = getExportedIdentifiers(indexFilePath)
+			for (const [name, { text, pathList }] of exportedIdentifiersFromIndexFile) {
+				if (pathList.indexOf(this.fileInfo.fullPath) === -1) {
+					continue
 				}
+
+				const sourcePath = _.last(pathList)
+				pickers.push({
+					label: name,
+					description: sourcePath === this.fileInfo.fullPath ? null : _.trim(sourcePath.substring(workspaceDirectory.length), fp.sep),
+					detail: _.truncate(text, { length: 120, omission: '...' }),
+				})
 			}
 
 			const workingDirectory = new FileInfo(document.fileName).directoryPath
@@ -547,30 +545,30 @@ export class FileItem implements Item {
 			)
 
 			// Stop processing if there is `import * as name from "path"`
-			if (availableNames.length > 0 && duplicateImportHasImportedEverything) {
+			if (pickers.length > 0 && duplicateImportHasImportedEverything) {
 				vscode.window.showErrorMessage(`The module "${name}" has been already imported from "${indexFileRelativePath}".`, { modal: true })
 				focusAt(duplicateImportForIndexFile.node, document)
 				return null
 			}
 
-			if (availableNames.length > 0) {
-				const selectedName = await vscode.window.showQuickPick(_.sortBy(
-					['*', ...availableNames],
-					name => name === 'default' ? '+' : name // Note that '+' comes after '*'
+			if (pickers.length > 0) {
+				const selectedPicker = await vscode.window.showQuickPick(_.sortBy(
+					[{ label: '*' }, ...pickers],
+					item => item.label === 'default' ? '+' : item.label.toLowerCase() // Note that '+' comes after '*'
 				))
 
-				if (!selectedName) {
+				if (!selectedPicker) {
 					return null
 				}
 
-				if (selectedName === '*') {
+				if (selectedPicker.label === '*') {
 					return {
 						name: name,
 						path: indexFileRelativePath,
 						kind: 'namespace',
 					}
 
-				} else if (selectedName === 'default') {
+				} else if (selectedPicker.label === 'default') {
 					return {
 						name,
 						path: indexFileRelativePath,
@@ -579,7 +577,7 @@ export class FileItem implements Item {
 
 				} else {
 					return {
-						name: selectedName,
+						name: selectedPicker.label,
 						path: indexFileRelativePath,
 						kind: 'named',
 					}
@@ -587,15 +585,15 @@ export class FileItem implements Item {
 			}
 		}
 
-		const exportedVariables = getExportedIdentifiers(this.fileInfo.fullPath)
-		if (exportedVariables.size === 0) {
+		const exportedIdentifiers = getExportedIdentifiers(this.fileInfo.fullPath)
+		if (exportedIdentifiers.size === 0) {
 			return {
 				name,
 				path,
 				kind: 'namespace',
 			}
 
-		} else if (exportedVariables.size === 1 && exportedVariables.has('default')) {
+		} else if (exportedIdentifiers.size === 1 && exportedIdentifiers.has('default')) {
 			return {
 				name,
 				path,
@@ -603,23 +601,33 @@ export class FileItem implements Item {
 			}
 		}
 
-		const selectedName = await vscode.window.showQuickPick(_.sortBy(
-			['*', ...exportedVariables.keys()],
-			name => name === 'default' ? '+' : name // Note that '+' comes after '*'
-		))
+		let pickers: Array<vscode.QuickPickItem> = [{ label: '*' }]
+		for (const [name, { text, pathList }] of exportedIdentifiers) {
+			const sourcePath = _.last(pathList)
+			pickers.push({
+				label: name,
+				description: sourcePath === this.fileInfo.fullPath ? null : _.trim(sourcePath.substring(workspaceDirectory.length), fp.sep),
+				detail: _.truncate(text, { length: 120, omission: '...' }),
+			})
+		}
+		pickers = _.sortBy(
+			pickers,
+			item => item.label === 'default' ? '+' : item.label.toLowerCase() // Note that '+' comes after '*'
+		)
 
-		if (!selectedName) {
+		const selectedPicker = await vscode.window.showQuickPick(pickers)
+		if (!selectedPicker) {
 			return null
 		}
 
-		if (selectedName === '*') {
+		if (selectedPicker.label === '*') {
 			return {
 				name,
 				path,
 				kind: 'namespace',
 			}
 
-		} else if (selectedName === 'default') {
+		} else if (selectedPicker.label === 'default') {
 			return {
 				name,
 				path,
@@ -628,7 +636,7 @@ export class FileItem implements Item {
 
 		} else {
 			return {
-				name: selectedName,
+				name: selectedPicker.label,
 				path,
 				kind: 'named',
 			}
@@ -680,6 +688,11 @@ class NodeItem implements Item {
 		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 		await JavaScript.fixESLint()
 	}
+}
+
+function checkIfIndexFile(fileNameWithExtension: string) {
+	const parts = fileNameWithExtension.split('.')
+	return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
 }
 
 function getRequirePath(node: ts.Node) {
@@ -865,7 +878,9 @@ async function getImportOrRequireSnippet(identifier: string, importClause: strin
 	}
 }
 
-function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<string, Map<string, Array<string>>>(), processingFilePaths = new Set<string>()) {
+interface IdentifierMap extends Map<string, { text: string, pathList: Array<string> }> { }
+
+function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<string, IdentifierMap>(), processingFilePaths = new Set<string>()) {
 	if (cachedFilePaths.has(filePath)) {
 		return cachedFilePaths.get(filePath)
 	}
@@ -873,8 +888,8 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 	const fileDirectory = fp.dirname(filePath)
 	const fileExtension = _.trimStart(fp.extname(filePath), '.')
 
-	const importedNames = new Map<string, Array<string>>()
-	const exportedNames = new Map<string, Array<string>>()
+	const importedNames: IdentifierMap = new Map()
+	const exportedNames: IdentifierMap = new Map()
 
 	// Prevent looping indefinitely because of a cyclic dependency
 	if (processingFilePaths.has(filePath)) {
@@ -896,27 +911,33 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 					return
 				}
 
+				const transitIdentifiers = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
+
 				if (node.importClause.name) {
 					// import named from "path"
-					importedNames.set(node.importClause.name.text, [path])
+					if (transitIdentifiers.has('default')) {
+						const { text, pathList } = transitIdentifiers.get('default')
+						importedNames.set(node.importClause.name.text, { text, pathList: [path, ...pathList] })
+					} else {
+						importedNames.set(node.importClause.name.text, { text: null, pathList: [path] })
+					}
 				}
 
 				if (node.importClause.namedBindings) {
 					if (ts.isNamedImports(node.importClause.namedBindings)) {
 						// import { named } from "path"
-						const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
 						for (const stub of node.importClause.namedBindings.elements) {
 							const name = stub.name.text
-							const pathList: Array<string> = [path]
-							if (transitVariables.has(name)) {
-								pathList.push(...transitVariables.get(name))
+							if (transitIdentifiers.has(name)) {
+								const { text, pathList } = transitIdentifiers.get(name)
+								importedNames.set(name, { text, pathList: [path, ...pathList] })
 							}
-							importedNames.set(name, pathList)
 						}
 
 					} else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
 						// import * as namespace from "path"
-						importedNames.set(node.importClause.namedBindings.name.text, [path])
+						// TODO: find the correct text by tracing `Namespace.Named`
+						importedNames.set(node.importClause.namedBindings.name.text, { text: node.getText(), pathList: [path] })
 					}
 				}
 
@@ -928,45 +949,48 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 					node.exportClause.elements.forEach(stub => {
 						const name = stub.name.text
 						if (path) {
-							const pathList = [path]
-							const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
-							if (stub.propertyName && transitVariables.has(stub.propertyName.text)) {
+							const transitIdentifiers = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
+							if (stub.propertyName && transitIdentifiers.has(stub.propertyName.text)) {
 								// export { named as exported } from "path"
-								pathList.push(...transitVariables.get(stub.propertyName.text))
-							} else if (transitVariables.has(name)) {
+								const { text, pathList } = transitIdentifiers.get(stub.propertyName.text)
+								exportedNames.set(name, { text, pathList: [path, ...pathList] })
+
+							} else if (transitIdentifiers.has(name)) {
 								// export { named } from "path"
-								pathList.push(...transitVariables.get(name))
+								const { text, pathList } = transitIdentifiers.get(name)
+								exportedNames.set(name, { text, pathList: [path, ...pathList] })
 							}
-							exportedNames.set(name, pathList)
 
 						} else {
-							const pathList = [filePath]
 							if (stub.propertyName && importedNames.has(stub.propertyName.text)) {
 								// export { named as exported }
-								pathList.push(...importedNames.get(stub.propertyName.text))
+								const { text, pathList } = importedNames.get(stub.propertyName.text)
+								exportedNames.set(name, { text, pathList: [filePath, ...pathList] })
+
 							} else if (importedNames.has(name)) {
 								// export { named }
-								pathList.push(...importedNames.get(name))
+								const { text, pathList } = importedNames.get(name)
+								exportedNames.set(name, { text, pathList: [filePath, ...pathList] })
 							}
-							exportedNames.set(name, pathList)
 						}
 					})
 
 				} else {
 					// export * from "path"
-					const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
-					transitVariables.forEach((pathList, name) => {
-						exportedNames.set(name, [filePath, ...pathList])
+					const transitIdentifiers = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
+					transitIdentifiers.forEach(({ text, pathList }, name) => {
+						exportedNames.set(name, { text, pathList: [filePath, ...pathList] })
 					})
 				}
 
 			} else if (ts.isExportAssignment(node)) {
 				// export default named
-				const pathList = [filePath]
 				if (ts.isIdentifier(node.expression) && importedNames.has(node.expression.text)) {
-					pathList.push(...importedNames.get(node.expression.text))
+					const { text, pathList } = importedNames.get(node.expression.text)
+					exportedNames.set('default', { text, pathList: [filePath, ...pathList] })
+				} else {
+					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
 				}
-				exportedNames.set('default', pathList)
 
 			} else if (
 				(ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
@@ -975,14 +999,14 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				if (node.modifiers.length > 1 && node.modifiers[1].kind === ts.SyntaxKind.DefaultKeyword) {
 					// export default function () {}
 					// export default function named () {}
-					exportedNames.set('default', [filePath])
+					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
 
 				} else if (node.name) {
 					// export function named () {}
 					// export class named {}
 					// export interface named {}
 					// export type named = ...
-					exportedNames.set(node.name.text, [filePath])
+					exportedNames.set(node.name.text, { text: node.getText(), pathList: [filePath] })
 				}
 
 			} else if (
@@ -992,7 +1016,7 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				// export const named = ...
 				node.declarationList.declarations.forEach(stub => {
 					if (ts.isIdentifier(stub.name)) {
-						exportedNames.set(stub.name.text, [filePath])
+						exportedNames.set(stub.name.text, { text: node.getText(), pathList: [filePath] })
 					}
 				})
 
@@ -1003,12 +1027,13 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				ts.isIdentifier(node.expression.left.expression) && node.expression.left.expression.text === 'module' && node.expression.left.name.text === 'exports' &&
 				ts.isObjectLiteralExpression(node.expression.right)
 			) {
-				// module.exports = { key: value }
-				const pathList = [filePath]
+				// module.exports = { ... }
 				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
-					pathList.push(...importedNames.get(node.expression.right.text))
+					const { text, pathList } = importedNames.get(node.expression.right.text)
+					exportedNames.set('default', { text, pathList: [filePath, ...pathList] })
+				} else {
+					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
 				}
-				exportedNames.set('default', pathList)
 
 			} else if (
 				ts.isExpressionStatement(node) &&
@@ -1021,11 +1046,12 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				node.expression.left.expression.name.text === 'exports'
 			) {
 				// module.exports.named = ...
-				const pathList = [filePath]
 				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
-					pathList.push(...importedNames.get(node.expression.right.text))
+					const { text, pathList } = importedNames.get(node.expression.right.text)
+					exportedNames.set(node.expression.left.name.text, { text, pathList: [filePath, ...pathList] })
+				} else {
+					exportedNames.set(node.expression.left.name.text, { text: node.getText(), pathList: [filePath] })
 				}
-				exportedNames.set(node.expression.left.name.text, pathList)
 			}
 		})
 

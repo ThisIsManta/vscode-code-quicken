@@ -1,3 +1,6 @@
+### 2.1.0
+- Added original export path and code preview to the import/require list for JavaScript and TypeScript.
+
 ### 2.0.0
 - Added support of Node.js built-in APIs.
 - Added support of reading `compilerOptions.esModuleInterop` and `compilerOptions.allowJs` from the local [`tsconfig.json`](https://www.typescriptlang.org/docs/handbook/tsconfig-json.html).
