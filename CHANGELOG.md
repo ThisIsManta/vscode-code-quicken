@@ -1,5 +1,6 @@
 ### 2.1.0
 - Added original export path and code preview to the import/require list for JavaScript and TypeScript.
+- Added variable assignments for JSON files.
 - Fixed wrong import/require path for non JS & CSS files.
 
 ### 2.0.0

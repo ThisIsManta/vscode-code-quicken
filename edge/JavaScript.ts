@@ -487,8 +487,9 @@ export class FileItem implements Item {
 			return null
 
 		} else { // In case of other file types
-			const { path } = this.getNameAndRelativePath(document)
-			const snippet = await getImportOrRequireSnippet(null, null, path, { ...options, syntax: 'require' }, codeTree, document)
+			const { name, path } = this.getNameAndRelativePath(document)
+			const identifierOnlyForJsonFile = this.fileInfo.fileExtensionWithoutLeadingDot === 'json' ? name : null
+			const snippet = await getImportOrRequireSnippet(identifierOnlyForJsonFile, null, path, { ...options, syntax: 'require' }, codeTree, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 			await JavaScript.fixESLint()
 			return null
