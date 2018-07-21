@@ -1,5 +1,6 @@
 ### 2.1.0
 - Added original export path and code preview to the import/require list for JavaScript and TypeScript.
+- Fixed wrong import/require path for non JS & CSS files.
 
 ### 2.0.0
 - Added support of Node.js built-in APIs.

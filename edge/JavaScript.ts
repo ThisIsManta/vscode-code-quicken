@@ -334,7 +334,7 @@ export class FileItem implements Item {
 			name = getVariableName(this.fileInfo.directoryName, options)
 		}
 
-		if (options.indexFile === false) {
+		if (options.indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			// Remove "/index.js" from the path
 			path = fp.dirname(path)
 
