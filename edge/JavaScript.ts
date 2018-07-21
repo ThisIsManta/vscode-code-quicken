@@ -839,12 +839,23 @@ async function getImportSnippet(clause: string, path: string, useImport: boolean
 	}
 }
 
-function getExportedIdentifiers(filePath: string) {
+function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<string, Map<string, Array<string>>>(), processingFilePaths = new Set<string>()) {
+	if (cachedFilePaths.has(filePath)) {
+		return cachedFilePaths.get(filePath)
+	}
+
 	const fileDirectory = fp.dirname(filePath)
 	const fileExtension = _.trimStart(fp.extname(filePath), '.')
 
 	const importedNames = new Map<string, Array<string>>()
 	const exportedNames = new Map<string, Array<string>>()
+
+	// Prevent looping indefinitely because of a cyclic dependency
+	if (processingFilePaths.has(filePath)) {
+		return exportedNames
+	} else {
+		processingFilePaths.add(filePath)
+	}
 
 	try {
 		const codeTree = JavaScript.parse(filePath)
@@ -867,10 +878,10 @@ function getExportedIdentifiers(filePath: string) {
 				if (node.importClause.namedBindings) {
 					if (ts.isNamedImports(node.importClause.namedBindings)) {
 						// import { named } from "path"
+						const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
 						for (const stub of node.importClause.namedBindings.elements) {
 							const name = stub.name.text
 							const pathList: Array<string> = [path]
-							const transitVariables = getExportedIdentifiers(path)
 							if (transitVariables.has(name)) {
 								pathList.push(...transitVariables.get(name))
 							}
@@ -892,7 +903,7 @@ function getExportedIdentifiers(filePath: string) {
 						const name = stub.name.text
 						if (path) {
 							const pathList = [path]
-							const transitVariables = getExportedIdentifiers(path)
+							const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
 							if (stub.propertyName && transitVariables.has(stub.propertyName.text)) {
 								// export { named as exported } from "path"
 								pathList.push(...transitVariables.get(stub.propertyName.text))
@@ -917,7 +928,7 @@ function getExportedIdentifiers(filePath: string) {
 
 				} else {
 					// export * from "path"
-					const transitVariables = getExportedIdentifiers(path)
+					const transitVariables = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
 					transitVariables.forEach((pathList, name) => {
 						exportedNames.set(name, [filePath, ...pathList])
 					})
@@ -995,6 +1006,13 @@ function getExportedIdentifiers(filePath: string) {
 	} catch (ex) {
 		console.error(ex)
 	}
+
+	if (cachedFilePaths.has(filePath) === false) {
+		cachedFilePaths.set(filePath, exportedNames)
+	}
+
+	processingFilePaths.delete(filePath)
+
 	return exportedNames
 }
 
