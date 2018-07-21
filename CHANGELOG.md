@@ -1,18 +1,20 @@
 ### 2.0.0
 - Added support of Node.js built-in APIs.
 - Added support of reading `compilerOptions.esModuleInterop` and `compilerOptions.allowJs` from the local [`tsconfig.json`](https://www.typescriptlang.org/docs/handbook/tsconfig-json.html).
-- Added progress to the status bar while populating files.
+- Added progress while populating files.
 - Fixed zero-file issue for Stylus.
 - Amended better support of JavaScript and TypeScript.
 - Amended the settings of JavaScript and TypeScript.
 - Removed `@types` modules from the import/require list for JavaScript and TypeScript.
+- Removed `codeQuicken.typescript.syntax` setting as it will be `"import"` by default.
 
 |Settings|Possible values|Default value|
 |---|---|---|
-|`codeQuicken.javascript.fileExtension` and `codeQuicken.typescript.fileExtension`|No changes|from `true` to `false`|
-|`codeQuicken.javascript.indexFile`|No changes|from `true` to `false`|
-|`codeQuicken.javascript.quoteCharacter` and `codeQuicken.typescript.quoteCharacter`|from `true`/`false` to `"single"`/`"double"`/`"auto"`|from `true` to `"auto"`|
-|`codeQuicken.javascript.semiColons` and `codeQuicken.typescript.semiColons`|from `true`/`false` to `"always"`/`"never"`/`"auto"`|from `true` to `"auto"`|
+|`codeQuicken.javascript.syntax`|From `"import"`/`"require"` to `"import"`/`"require"`/`"auto"`|From `"require"` to `"auto"`|
+|`codeQuicken.javascript.fileExtension` and `codeQuicken.typescript.fileExtension`|No changes|From `true` to `false`|
+|`codeQuicken.javascript.indexFile`|No changes|From `true` to `false`|
+|`codeQuicken.javascript.quoteCharacter` and `codeQuicken.typescript.quoteCharacter`|From `true`/`false` to `"single"`/`"double"`/`"auto"`|From `true` to `"auto"`|
+|`codeQuicken.javascript.semiColons` and `codeQuicken.typescript.semiColons`|From `true`/`false` to `"always"`/`"never"`/`"auto"`|From `true` to `"auto"`|
 
 ### 1.4.0
 - Amended picking the closest `package.json` from the current active document.

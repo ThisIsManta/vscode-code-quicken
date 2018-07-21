@@ -8,7 +8,7 @@ import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly }
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
-	syntax: 'import' | 'require'
+	syntax: 'import' | 'require' | 'auto'
 	grouping: boolean
 	fileExtension: boolean
 	indexFile: boolean
@@ -26,7 +26,7 @@ export default class JavaScript implements Language {
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
 
-	protected acceptedLanguage = /^javascript(react)?/
+	protected acceptedLanguage = /^javascript(react)?$/
 
 	constructor(baseConfig: RootConfigurations) {
 		this.baseConfig = baseConfig
@@ -281,7 +281,7 @@ export default class JavaScript implements Language {
 		try {
 			const filePath = typeof documentOrFilePath === 'string' ? documentOrFilePath : documentOrFilePath.fileName
 			const codeText = typeof documentOrFilePath === 'string' ? fs.readFileSync(filePath, 'utf-8') : documentOrFilePath.getText()
-			return ts.createSourceFile('file', codeText, ts.ScriptTarget.ESNext, true)
+			return ts.createSourceFile(filePath, codeText, ts.ScriptTarget.ESNext, true)
 
 		} catch (ex) {
 			console.error(ex)
@@ -464,7 +464,7 @@ export class FileItem implements Item {
 				clause = '{ ' + name + ' }'
 			}
 
-			const snippet = await getImportSnippet(clause, path, options.syntax === 'import', options, document)
+			const snippet = await getImportSnippet(clause, path, options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -479,14 +479,14 @@ export class FileItem implements Item {
 				return null
 			}
 
-			const snippet = await getImportSnippet(null, path, options.syntax === 'import', options, document)
+			const snippet = await getImportSnippet(null, path, options, document)
 			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 			await JavaScript.fixESLint()
 			return null
 
 		} else { // In case of other file types
 			const { path } = this.getNameAndRelativePath(document)
-			const snippet = await getImportSnippet(null, path, false, options, document)
+			const snippet = await getImportSnippet(null, path, { ...options, syntax: 'require' }, document)
 			await editor.edit(worker => worker.insert(vscode.window.activeTextEditor.selection.active, snippet))
 			await JavaScript.fixESLint()
 			return null
@@ -674,13 +674,13 @@ class NodeItem implements Item {
 			? this.name
 			: `* as ${this.name}`
 
-		const snippet = await getImportSnippet(clause, this.path, options.syntax === 'import', options, document)
+		const snippet = await getImportSnippet(clause, this.path, options, document)
 		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
 		await JavaScript.fixESLint()
 	}
 }
 
-function tryGetPathInRequire(node: ts.Node) {
+function getRequirePath(node: ts.Node) {
 	if (node && ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1) {
 		const firstArgument = node.arguments[0]
 		if (ts.isStringLiteral(firstArgument)) {
@@ -708,14 +708,14 @@ function getExistingImports(codeTree: ts.SourceFile) {
 			// For `var name = require('...')`
 			//     `var { name } = require('...')`
 			node.declarationList.declarations.forEach(node => {
-				if (ts.isVariableDeclaration(node) && node.initializer && tryGetPathInRequire(node.initializer)) {
-					imports.push({ node, path: tryGetPathInRequire(node.initializer) })
+				if (ts.isVariableDeclaration(node) && node.initializer && getRequirePath(node.initializer)) {
+					imports.push({ node, path: getRequirePath(node.initializer) })
 				}
 			})
 
-		} else if (ts.isExpressionStatement(node) && tryGetPathInRequire(node.expression)) {
+		} else if (ts.isExpressionStatement(node) && getRequirePath(node.expression)) {
 			// For `require('...')`
-			imports.push({ node, path: tryGetPathInRequire(node.expression) })
+			imports.push({ node, path: getRequirePath(node.expression) })
 		}
 	})
 
@@ -754,16 +754,26 @@ function getVariableName(name: string, options: LanguageOptions) {
 	}
 }
 
-async function matchNearbyFiles<T>(document: vscode.TextDocument, matcher: (filePath: string) => Promise<T>): Promise<T> {
-	const workspaceDirectory = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
-	const workingDirectory = _.trim(document.uri.fsPath.substring(workspaceDirectory.length), fp.sep)
+async function matchNearbyFiles<T>(filePath: string, matcher: (codeTree: ts.SourceFile, stopPropagation?: boolean) => Promise<T>): Promise<T> {
+	const workingDocumentLink = vscode.Uri.file(filePath)
+	const workspaceDirectory = vscode.workspace.getWorkspaceFolder(workingDocumentLink).uri.fsPath
+	const workingDirectory = _.trim(workingDocumentLink.fsPath.substring(workspaceDirectory.length), fp.sep)
 	const workingDirectoryParts = workingDirectory.split(fp.sep)
 	do {
 		workingDirectoryParts.pop() // Note that the first `pop()` is the file name itself
 
-		const files = await vscode.workspace.findFiles(fp.join(...workingDirectoryParts, '*' + fp.extname(document.uri.fsPath)), null, 10)
-		for (const file of files) {
-			const result = await matcher(file.fsPath)
+		const fileLinks = await vscode.workspace.findFiles(fp.join(...workingDirectoryParts, '**', '*' + fp.extname(workingDocumentLink.fsPath)), null, 10)
+		for (const link of fileLinks) {
+			if (link.fsPath === workingDocumentLink.fsPath) {
+				continue
+			}
+
+			const codeTree = JavaScript.parse(link.fsPath)
+			if (!codeTree) {
+				continue
+			}
+
+			const result = await matcher(codeTree, true)
 			if (result !== null && result !== undefined) {
 				return result
 			}
@@ -771,8 +781,7 @@ async function matchNearbyFiles<T>(document: vscode.TextDocument, matcher: (file
 	} while (workingDirectoryParts.length > 0)
 }
 
-async function getQuoteCharacter(documentOrFilePath: vscode.TextDocument | string): Promise<string> {
-	const codeTree = JavaScript.parse(documentOrFilePath)
+async function getQuoteCharacter(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<string> {
 	const chars = findNodesRecursively<ts.StringLiteral>(codeTree, node => ts.isStringLiteral(node)).map(node => node.getText().trim().charAt(0))
 	if (chars.length > 0) {
 		const singleQuoteCount = chars.filter(char => char === "'").length
@@ -786,15 +795,14 @@ async function getQuoteCharacter(documentOrFilePath: vscode.TextDocument | strin
 		}
 	}
 
-	if (typeof documentOrFilePath === 'string') {
+	if (stopPropagation) {
 		return null
 	}
 
-	return matchNearbyFiles(documentOrFilePath, getQuoteCharacter)
+	return matchNearbyFiles(codeTree.fileName, getQuoteCharacter)
 }
 
-async function hasSemiColon(documentOrFilePath: vscode.TextDocument | string): Promise<boolean> {
-	const codeTree = JavaScript.parse(documentOrFilePath)
+async function hasSemiColon(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<boolean> {
 	const statements = _.chain([codeTree, ...findNodesRecursively<ts.Block>(codeTree, node => ts.isBlock(node))])
 		.map(block => Array.from(block.statements))
 		.flatten()
@@ -804,26 +812,44 @@ async function hasSemiColon(documentOrFilePath: vscode.TextDocument | string): P
 		return statements.some(node => node.getText().trim().endsWith(';'))
 	}
 
-	if (typeof documentOrFilePath === 'string') {
+	if (stopPropagation) {
 		return null
 	}
 
-	return matchNearbyFiles(documentOrFilePath, hasSemiColon)
+	return matchNearbyFiles(codeTree.fileName, hasSemiColon)
 }
 
-async function getImportSnippet(clause: string, path: string, useImport: boolean, options: LanguageOptions, document: vscode.TextDocument) {
+async function hasImportSyntax(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<boolean> {
+	if (codeTree.statements.some(node => ts.isImportDeclaration(node))) {
+		return true
+	}
+
+	if (findNodesRecursively(codeTree, node => !!getRequirePath(node)).length > 0) {
+		return false
+	}
+
+	if (stopPropagation) {
+		return null
+	}
+
+	return matchNearbyFiles(codeTree.fileName, hasImportSyntax)
+}
+
+async function getImportSnippet(clause: string, path: string, options: LanguageOptions, document: vscode.TextDocument) {
+	const codeTree = JavaScript.parse(document)
+
 	let quote = "'"
 	if (options.quoteCharacter === 'double') {
 		quote = '"'
 	} else if (options.quoteCharacter === 'auto') {
-		quote = await getQuoteCharacter(document) || quote
+		quote = await getQuoteCharacter(codeTree) || quote
 	}
 
-	const statementEnding = (options.semiColons === 'always' || options.semiColons === 'auto' && await hasSemiColon(document)) ? ';' : ''
+	const statementEnding = (options.semiColons === 'always' || options.semiColons === 'auto' && await hasSemiColon(codeTree)) ? ';' : ''
 
 	const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
 
-	if (useImport) {
+	if (options.syntax === 'import' || options.syntax === 'auto' && await hasImportSyntax(codeTree)) {
 		if (clause) {
 			return `import ${clause} from ${quote}${path}${quote}` + statementEnding + lineEnding
 		} else {

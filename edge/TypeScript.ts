@@ -4,6 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import { RootConfigurations } from './global'
 import JavaScript from './JavaScript'
+import * as ts from 'typescript'
 
 export default class TypeScript extends JavaScript {
 	constructor(baseConfig: RootConfigurations) {
@@ -13,7 +14,9 @@ export default class TypeScript extends JavaScript {
 	}
 
 	getLanguageOptions() {
-		return this.baseConfig.typescript
+		const modifiedOptions = _.cloneDeep(this.baseConfig.typescript)
+		modifiedOptions.syntax = 'import'
+		return modifiedOptions
 	}
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
@@ -40,7 +43,10 @@ export default class TypeScript extends JavaScript {
 			.find(path => vscode.window.activeTextEditor.document.uri.fsPath.startsWith(fp.dirname(path) + fp.sep))
 			.value()
 		if (path) {
-			return JSON.parse(fs.readFileSync(path, 'utf-8'))
+			const { config, error } = ts.parseConfigFileTextToJson(path, fs.readFileSync(path, 'utf-8'))
+			if (config && !error) {
+				return config
+			}
 		}
 	}
 }

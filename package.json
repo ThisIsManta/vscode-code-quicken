@@ -59,9 +59,10 @@
                     "type": "string",
                     "enum": [
                         "import",
-                        "require"
+                        "require",
+                        "auto"
                     ],
-                    "default": "require"
+                    "default": "auto"
                 },
                 "codeQuicken.javascript.grouping": {
                     "description": "Allow grouping multiple-imports if and only if \"codeQuicken.javascript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
@@ -129,15 +130,6 @@
                         }
                     },
                     "default": {}
-                },
-                "codeQuicken.typescript.syntax": {
-                    "description": "Insert either ES2015's import or AMD's require syntax.",
-                    "type": "string",
-                    "enum": [
-                        "import",
-                        "require"
-                    ],
-                    "default": "import"
                 },
                 "codeQuicken.typescript.grouping": {
                     "description": "Allow grouping multiple-imports if and only if \"codeQuicken.typescript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
