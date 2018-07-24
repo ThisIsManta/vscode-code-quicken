@@ -778,7 +778,7 @@ function getVariableName(name: string, options: LanguageOptions) {
 	}
 }
 
-async function matchNearbyFiles<T>(filePath: string, matcher: (codeTree: ts.SourceFile, stopPropagation?: boolean) => Promise<T>): Promise<T> {
+async function matchNearbyFiles<T>(filePath: string, matcher: (codeTree: ts.SourceFile, stopPropagation?: boolean) => Promise<T>, defaultValue: T): Promise<T> {
 	const workingDocumentLink = vscode.Uri.file(filePath)
 	const workspaceDirectory = vscode.workspace.getWorkspaceFolder(workingDocumentLink).uri.fsPath
 	const workingDirectory = _.trim(workingDocumentLink.fsPath.substring(workspaceDirectory.length), fp.sep)
@@ -803,6 +803,8 @@ async function matchNearbyFiles<T>(filePath: string, matcher: (codeTree: ts.Sour
 			}
 		}
 	} while (workingDirectoryParts.length > 0)
+
+	return defaultValue
 }
 
 async function getQuoteCharacter(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<string> {
@@ -823,7 +825,7 @@ async function getQuoteCharacter(codeTree: ts.SourceFile, stopPropagation?: bool
 		return null
 	}
 
-	return matchNearbyFiles(codeTree.fileName, getQuoteCharacter)
+	return matchNearbyFiles(codeTree.fileName, getQuoteCharacter, '"')
 }
 
 async function hasSemiColon(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<boolean> {
@@ -840,7 +842,7 @@ async function hasSemiColon(codeTree: ts.SourceFile, stopPropagation?: boolean):
 		return null
 	}
 
-	return matchNearbyFiles(codeTree.fileName, hasSemiColon)
+	return matchNearbyFiles(codeTree.fileName, hasSemiColon, true)
 }
 
 async function hasImportSyntax(codeTree: ts.SourceFile, stopPropagation?: boolean): Promise<boolean> {
@@ -856,7 +858,7 @@ async function hasImportSyntax(codeTree: ts.SourceFile, stopPropagation?: boolea
 		return null
 	}
 
-	return matchNearbyFiles(codeTree.fileName, hasImportSyntax)
+	return matchNearbyFiles(codeTree.fileName, hasImportSyntax, false)
 }
 
 async function getImportOrRequireSnippet(identifier: string, importClause: string, path: string, options: LanguageOptions, codeTree: ts.SourceFile, document: vscode.TextDocument) {
