@@ -2,7 +2,7 @@ import * as fp from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as _ from 'lodash'
-import { RootConfigurations } from './global'
+import { Configurations } from './global'
 import RecentSelectedItems from './RecentSelectedItems'
 
 export default class LocalStorage {
@@ -10,7 +10,7 @@ export default class LocalStorage {
 
 	recentSelectedItems: RecentSelectedItems
 
-	load(rootConfig: RootConfigurations) {
+	load(config: Configurations) {
 		let json = {}
 		if (fs.existsSync(LocalStorage.path)) {
 			try {
@@ -22,7 +22,7 @@ export default class LocalStorage {
 			}
 		}
 
-		this.recentSelectedItems = new RecentSelectedItems(rootConfig.history)
+		this.recentSelectedItems = new RecentSelectedItems(config.history)
 		this.recentSelectedItems.fromJSON(_.get(json, 'recentSelectedItems', {}))
 	}
 

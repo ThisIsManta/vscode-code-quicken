@@ -4,7 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as ts from 'typescript'
 
-import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
+import { Configurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -22,18 +22,15 @@ export interface LanguageOptions {
 const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
 
 export default class JavaScript implements Language {
-	protected baseConfig: RootConfigurations
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache: Array<NodeItem>
 
 	protected acceptedLanguage = /^javascript(react)?$/
 
-	constructor(baseConfig: RootConfigurations) {
-		this.baseConfig = baseConfig
-	}
+	public options: LanguageOptions
 
-	getLanguageOptions() {
-		return this.baseConfig.javascript
+	constructor(config: Configurations) {
+		this.options = config.javascript
 	}
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
@@ -56,7 +53,7 @@ export default class JavaScript implements Language {
 				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this))
 		}
 
-		const fileFilterRule = _.toPairs(this.getLanguageOptions().filteredFileList)
+		const fileFilterRule = _.toPairs(this.options.filteredFileList)
 			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
 			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
 
@@ -307,10 +304,10 @@ export class FileItem implements Item {
 		this.label = this.fileInfo.fileNameWithExtension
 		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 
-		if (this.language.getLanguageOptions().indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
+		if (this.language.options.indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
-		} else if (this.language.getLanguageOptions().fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		} else if (this.language.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		}
 
@@ -325,7 +322,7 @@ export class FileItem implements Item {
 
 	getNameAndRelativePath(document: vscode.TextDocument) {
 		const workingDirectory = new FileInfo(document.fileName).directoryPath
-		const options = this.language.getLanguageOptions()
+		const options = this.language.options
 		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, options)
 		let path = this.fileInfo.getRelativePath(workingDirectory)
 
@@ -347,7 +344,7 @@ export class FileItem implements Item {
 	}
 
 	async addImport(editor: vscode.TextEditor) {
-		const options = this.language.getLanguageOptions()
+		const options = this.language.options
 		const document = editor.document
 
 		const codeTree = JavaScript.parse(document)
@@ -497,7 +494,7 @@ export class FileItem implements Item {
 	}
 
 	private async getImportPatternForJavaScript(existingImports: Array<ImportStatementForReadOnly>, document: vscode.TextDocument): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
-		const options = this.language.getLanguageOptions()
+		const options = this.language.options
 		const workspaceDirectory = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 		const workingDirectory = fp.dirname(document.fileName)
 		const { name, path } = this.getNameAndRelativePath(document)
@@ -665,13 +662,13 @@ class NodeItem implements Item {
 		this.id = 'node://' + name
 		this.label = name
 		this.description = version ? 'v' + version : ''
-		this.name = getVariableName(name, language.getLanguageOptions())
+		this.name = getVariableName(name, language.options)
 		this.path = name
 		this.language = language
 	}
 
 	async addImport(editor: vscode.TextEditor) {
-		const options = this.language.getLanguageOptions()
+		const options = this.language.options
 		const document = editor.document
 
 		const codeTree = JavaScript.parse(document)

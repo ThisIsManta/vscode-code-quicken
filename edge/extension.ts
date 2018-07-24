@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { RootConfigurations, Language, Item } from './global';
+import { Configurations, Language, Item } from './global';
 import LocalStorage from './LocalStorage'
 import JavaScript from './JavaScript'
 import TypeScript from './TypeScript'
@@ -11,22 +11,22 @@ let fileWatch: vscode.FileSystemWatcher
 let localStorage = new LocalStorage()
 
 export function activate(context: vscode.ExtensionContext) {
-    let rootConfig: RootConfigurations
+    let config: Configurations
 
     function initialize() {
-        rootConfig = vscode.workspace.getConfiguration().get<RootConfigurations>('codeQuicken')
+        config = vscode.workspace.getConfiguration().get<Configurations>('codeQuicken')
 
-        localStorage.load(rootConfig)
+        localStorage.load(config)
 
         if (languages) {
-            languages.forEach(lang => lang.reset())
+            languages.forEach(language => language.reset())
         }
 
         languages = [
             // Add new supported languages here
-            new JavaScript(rootConfig),
-            new TypeScript(rootConfig),
-            new Stylus(rootConfig),
+            new JavaScript(config),
+            new TypeScript(config),
+            new Stylus(config),
         ]
     }
 
@@ -35,10 +35,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     fileWatch = vscode.workspace.createFileSystemWatcher('**/*', false, true, false)
     fileWatch.onDidCreate(e => {
-        languages.forEach(lang => lang.addItem ? lang.addItem(e.fsPath) : lang.reset())
+        languages.forEach(language => language.addItem ? language.addItem(e.fsPath) : language.reset())
     })
     fileWatch.onDidDelete(e => {
-        languages.forEach(lang => lang.cutItem ? lang.cutItem(e.fsPath) : lang.reset())
+        languages.forEach(language => language.cutItem ? language.cutItem(e.fsPath) : language.reset())
     })
 
     context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.addImport', async function () {
@@ -130,7 +130,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    languages.forEach(lang => lang.reset())
+    languages.forEach(language => language.reset())
     fileWatch.dispose()
 
     localStorage.save()

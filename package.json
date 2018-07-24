@@ -55,7 +55,7 @@
                     "default": 1
                 },
                 "codeQuicken.javascript.syntax": {
-                    "description": "Insert either ES2015's import or AMD's require syntax.",
+                    "description": "Insert either ES2015's import or AMD's require syntax. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
                     "type": "string",
                     "enum": [
                         "import",
@@ -65,22 +65,22 @@
                     "default": "auto"
                 },
                 "codeQuicken.javascript.grouping": {
-                    "description": "Allow grouping multiple-imports if and only if \"codeQuicken.javascript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
+                    "description": "Allow grouping multiple-imports. For example, adding `bar` to `import { foo } from 'zoo';` so it becomes `import { foo, bar } from 'zoo';`",
                     "type": "boolean",
                     "default": false
                 },
                 "codeQuicken.javascript.fileExtension": {
-                    "description": "Insert JS/JSX file extension to the path.",
+                    "description": "Insert JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
                     "default": false
                 },
                 "codeQuicken.javascript.indexFile": {
-                    "description": "Insert \"index\" file name with JS/JSX file extension to the path.",
+                    "description": "Insert \"index\" file name and also its extension to the path.",
                     "type": "boolean",
                     "default": false
                 },
                 "codeQuicken.javascript.quoteCharacter": {
-                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "description": "Insert either single quotes or double quotes as a string enclosure. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
                     "type": "string",
                     "enum": [
                         "single",
@@ -90,7 +90,7 @@
                     "default": "auto"
                 },
                 "codeQuicken.javascript.semiColons": {
-                    "description": "Insert statement-ending semi-colons.",
+                    "description": "Insert statement-ending semi-colons. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
                     "type": "string",
                     "enum": [
                         "always",
@@ -110,7 +110,7 @@
                     "default": {}
                 },
                 "codeQuicken.javascript.variableNamingConvention": {
-                    "description": "Define variable naming convention. This has no effects on \"codeQuicken.javascript.predefinedVariableNames\"",
+                    "description": "Define the variable naming convention. This has no effects on \"codeQuicken.javascript.predefinedVariableNames\"",
                     "type": "string",
                     "enum": [
                         "camelCase",
@@ -132,7 +132,7 @@
                     "default": {}
                 },
                 "codeQuicken.typescript.grouping": {
-                    "description": "Allow grouping multiple-imports if and only if \"codeQuicken.typescript.syntax\" is set to \"import\". For example, `import { foo, bar } from 'zoo';`",
+                    "description": "Allow grouping multiple-imports. For example, adding `bar` to `import { foo } from 'zoo';` so it becomes `import { foo, bar } from 'zoo';`",
                     "type": "boolean",
                     "default": true
                 },
@@ -142,12 +142,12 @@
                     "default": false
                 },
                 "codeQuicken.typescript.indexFile": {
-                    "description": "Insert \"index\" file name with JS/JSX/TS/TSX file extension to the path.",
+                    "description": "Insert \"index\" file name and also its extension to the path.",
                     "type": "boolean",
                     "default": false
                 },
                 "codeQuicken.typescript.quoteCharacter": {
-                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "description": "Insert either single quotes or double quotes as a string enclosure. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
                     "type": "string",
                     "enum": [
                         "single",
@@ -157,7 +157,7 @@
                     "default": "auto"
                 },
                 "codeQuicken.typescript.semiColons": {
-                    "description": "Insert statement-ending semi-colons.",
+                    "description": "Insert statement-ending semi-colons. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
                     "type": "string",
                     "enum": [
                         "always",
@@ -167,7 +167,7 @@
                     "default": "auto"
                 },
                 "codeQuicken.typescript.predefinedVariableNames": {
-                    "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `const bar_123 = require(\"./foo-123.ts\");`",
+                    "description": "Replace the given file-name keys with its respective variable-name values. The file-name keys must be written in regular expression. For example, setting this to `{ \"foo-(\\\\d)+\": \"bar_$1\" }` writes `import bar_123 from \"./foo-123.ts\";`",
                     "type": "object",
                     "patternProperties": {
                         ".": {
@@ -177,7 +177,7 @@
                     "default": {}
                 },
                 "codeQuicken.typescript.variableNamingConvention": {
-                    "description": "Define variable naming convention. This has no effects on \"codeQuicken.typescript.predefinedVariableNames\"",
+                    "description": "Define the variable naming convention. This has no effects on \"codeQuicken.typescript.predefinedVariableNames\"",
                     "type": "string",
                     "enum": [
                         "camelCase",
@@ -213,12 +213,12 @@
                     "default": true
                 },
                 "codeQuicken.stylus.indexFile": {
-                    "description": "Insert STYL file extension to the path.",
+                    "description": "Insert \"index\" file name and also its extension to the path.",
                     "type": "boolean",
                     "default": true
                 },
                 "codeQuicken.stylus.quoteCharacter": {
-                    "description": "Insert either single quote or double quote as a string enclosure.",
+                    "description": "Insert either single quotes or double quotes as a string enclosure.",
                     "type": "string",
                     "enum": [
                         "single",

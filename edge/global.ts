@@ -5,7 +5,7 @@ import FileInfo from './FileInfo'
 import * as JavaScript from './JavaScript'
 import * as Stylus from './Stylus'
 
-export interface RootConfigurations {
+export interface Configurations {
 	history: number
 	javascript: JavaScript.LanguageOptions
 	typescript: JavaScript.LanguageOptions
@@ -14,10 +14,10 @@ export interface RootConfigurations {
 
 export interface Language {
 	getItems(document: vscode.TextDocument): Promise<Array<Item> | null>
-	addItem?(filePath: string)
-	cutItem?(filePath: string)
+	addItem?(filePath: string): void
+	cutItem?(filePath: string): void
 	fixImport?(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken): Promise<boolean | null>
-	reset()
+	reset(): void
 }
 
 export interface Item extends vscode.QuickPickItem {

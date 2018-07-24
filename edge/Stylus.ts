@@ -4,7 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import { Parser, nodes as Nodes } from 'stylus'
 
-import { RootConfigurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
+import { Configurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -18,11 +18,11 @@ export interface LanguageOptions {
 const SUPPORTED_LANGUAGE = /^stylus$/
 
 export default class Stylus implements Language {
-	private baseConfig: RootConfigurations
+	private options: LanguageOptions
 	private fileItemCache: Array<FileItem>
 
-	constructor(baseConfig: RootConfigurations) {
-		this.baseConfig = baseConfig
+	constructor(config: Configurations) {
+		this.options = config.stylus
 	}
 
 	async getItems(document: vscode.TextDocument) {
@@ -37,7 +37,7 @@ export default class Stylus implements Language {
 			const fileLinks = await vscode.workspace.findFiles('**/*.{styl,css,jpg,jpeg,png,gif,svg,otf,ttf,woff,woff2,eot}')
 
 			this.fileItemCache = fileLinks
-				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.baseConfig.stylus))
+				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.options))
 		}
 
 		return _.chain(this.fileItemCache)
@@ -54,7 +54,7 @@ export default class Stylus implements Language {
 		if (this.fileItemCache) {
 			const fileInfo = new FileInfo(filePath)
 			const rootPath = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath)).uri.fsPath
-			this.fileItemCache.push(new FileItem(fileInfo, rootPath, this.baseConfig.stylus))
+			this.fileItemCache.push(new FileItem(fileInfo, rootPath, this.options))
 		}
 	}
 
@@ -127,12 +127,12 @@ export default class Stylus implements Language {
 
 			} else if (matchingFullPaths.length === 1) {
 				await editor.edit(worker => {
-					const item = new FileItem(new FileInfo(matchingFullPaths[0]), rootPath, this.baseConfig.stylus)
+					const item = new FileItem(new FileInfo(matchingFullPaths[0]), rootPath, this.options)
 					worker.replace(getEditableRange(node), item.getRelativePath(documentFileInfo.directoryPath))
 				})
 
 			} else {
-				const candidateItems = matchingFullPaths.map(path => new FileItem(new FileInfo(path), rootPath, this.baseConfig.stylus))
+				const candidateItems = matchingFullPaths.map(path => new FileItem(new FileInfo(path), rootPath, this.options))
 				const selectedItem = await vscode.window.showQuickPick(candidateItems, { placeHolder: node.val })
 
 				if (!selectedItem) {
