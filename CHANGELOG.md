@@ -1,5 +1,6 @@
-### 2.1.2
+### 2.2.0
 - Added support of `export enum named = ...`.
+- Amended `codeQuicken.typescript.predefinedVariableNames` setting so it also borrows the values specified in `codeQuicken.javascript.predefinedVariableNames` setting.
 
 ### 2.1.1
 - Amended importing internal files instead of index files for JavaScript and TypeScript.

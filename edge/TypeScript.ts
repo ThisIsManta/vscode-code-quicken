@@ -10,7 +10,17 @@ const JAVASCRIPT_EXTENSION = /\.jsx?$/i
 
 export default class TypeScript extends JavaScript {
 	constructor(config: Configurations) {
-		super({ ...config, javascript: { ...config.typescript, syntax: 'import' } })
+		super({
+			...config,
+			javascript: {
+				...config.typescript,
+				predefinedVariableNames: {
+					...config.typescript.predefinedVariableNames,
+					..._.omit(config.javascript.predefinedVariableNames, _.keys(config.typescript.predefinedVariableNames))
+				},
+				syntax: 'import',
+			}
+		})
 
 		this.acceptedLanguage = /^typescript(react)?/
 	}
