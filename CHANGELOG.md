@@ -1,3 +1,6 @@
+### 2.1.2
+- Added support of `export enum named = ...`.
+
 ### 2.1.1
 - Amended importing internal files instead of index files for JavaScript and TypeScript.
 - Fixed missing require index path for JavaScript and TypeScript.

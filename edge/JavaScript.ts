@@ -1002,7 +1002,7 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				}
 
 			} else if (
-				(ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
+				(ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)) &&
 				node.modifiers && node.modifiers.length > 0 && node.modifiers[0].kind === ts.SyntaxKind.ExportKeyword
 			) {
 				if (node.modifiers.length > 1 && node.modifiers[1].kind === ts.SyntaxKind.DefaultKeyword) {
@@ -1015,6 +1015,7 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 					// export class named {}
 					// export interface named {}
 					// export type named = ...
+					// export enum named = ...
 					exportedNames.set(node.name.text, { text: node.getText(), pathList: [filePath] })
 				}
 
