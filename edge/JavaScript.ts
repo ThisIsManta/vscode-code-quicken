@@ -351,11 +351,6 @@ export class FileItem implements Item {
 
 		const existingImports = getExistingImports(codeTree)
 
-		let beforeFirstImport = new vscode.Position(0, 0)
-		if (existingImports.length > 0) {
-			beforeFirstImport = document.positionAt(existingImports[0].node.getStart())
-		}
-
 		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			const pattern = await this.getImportPatternForJavaScript(existingImports, document)
 			if (!pattern) {
@@ -464,7 +459,7 @@ export class FileItem implements Item {
 			}
 
 			const snippet = await getImportOrRequireSnippet(name, importClause, path, options, codeTree, document)
-			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
+			await editor.edit(worker => worker.insert(getInsertionPosition(existingImports, path, document), snippet))
 			await JavaScript.fixESLint()
 			return null
 
@@ -479,7 +474,7 @@ export class FileItem implements Item {
 			}
 
 			const snippet = await getImportOrRequireSnippet(null, null, path, options, codeTree, document)
-			await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
+			await editor.edit(worker => worker.insert(getInsertionPosition(existingImports, path, document), snippet))
 			await JavaScript.fixESLint()
 			return null
 
@@ -681,17 +676,12 @@ class NodeItem implements Item {
 			return null
 		}
 
-		let beforeFirstImport = new vscode.Position(0, 0)
-		if (existingImports.length > 0) {
-			beforeFirstImport = document.positionAt(existingImports[0].node.getStart())
-		}
-
 		const importClause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
 			? this.name
 			: `* as ${this.name}`
 
 		const snippet = await getImportOrRequireSnippet(this.name, importClause, this.path, options, codeTree, document)
-		await editor.edit(worker => worker.insert(beforeFirstImport, snippet))
+		await editor.edit(worker => worker.insert(getInsertionPosition(existingImports, this.path, document), snippet))
 		await JavaScript.fixESLint()
 	}
 }
@@ -1101,6 +1091,35 @@ function getFilePath(pathList: Array<string>, preferredExtension: string): strin
 
 function getDuplicateImport(existingImports: Array<ImportStatementForReadOnly>, path: string) {
 	return existingImports.find(stub => stub.path === path)
+}
+
+function getInsertionPosition(existingImports: Array<ImportStatementForReadOnly>, path: string, document: vscode.TextDocument) {
+	if (existingImports.length > 0) {
+		if (path.startsWith('.')) {
+			const fileImportList = existingImports.filter(stub => stub.path.startsWith('.'))
+			const targetImport = _.find(fileImportList, stub => stub.path.localeCompare(path) === 1)
+			if (targetImport) {
+				return document.positionAt(targetImport.node.getStart())
+			} else if (fileImportList.length > 0) {
+				return document.positionAt(_.last(fileImportList).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
+			} else {
+				return document.positionAt(_.last(existingImports).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
+			}
+
+		} else {
+			const nodeImportList = existingImports.filter(stub => stub.path.startsWith('.') === false)
+			const targetImport = _.find(nodeImportList, stub => stub.path.localeCompare(path) === 1)
+			if (targetImport) {
+				return document.positionAt(targetImport.node.getStart())
+			} else if (nodeImportList.length > 0) {
+				return document.positionAt(_.last(nodeImportList).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
+			} else {
+				return document.positionAt(_.first(existingImports).node.getStart())
+			}
+		}
+	}
+
+	return new vscode.Position(0, 0)
 }
 
 function findNodesRecursively<T extends ts.Node>(node: ts.Node, condition: (node: ts.Node) => boolean, results: Array<T> = [], visited = new Set<ts.Node>()) {

@@ -1,3 +1,6 @@
+### 2.3.0
+- Amended alphabetical order of imports for JavaScript and TypeScript.
+
 ### 2.2.0
 - Added support of `export enum named = ...`.
 - Amended `codeQuicken.typescript.predefinedVariableNames` setting so it also borrows the values specified in `codeQuicken.javascript.predefinedVariableNames` setting.
