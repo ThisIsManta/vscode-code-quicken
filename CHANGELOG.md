@@ -1,4 +1,5 @@
 ### 2.3.0
+- Added duplicate identifier resolution dialog for JavaScript and TypeScript.
 - Amended alphabetical order of imports for JavaScript and TypeScript.
 
 ### 2.2.0
