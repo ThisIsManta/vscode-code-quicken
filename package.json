@@ -244,6 +244,7 @@
         "postinstall": "node ./node_modules/vscode/bin/install",
         "compile": "tsc --watch --project ./",
         "vscode:prepublish": "tsc --skipLibCheck --project ./",
+        "preversion": "git push --dry-run origin master:master",
         "version": "vsce publish",
         "postversion": "git push --tags --quiet origin master:master"
     },
