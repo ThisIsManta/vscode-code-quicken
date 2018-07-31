@@ -1,5 +1,6 @@
 ### 2.3.1
 - Amended never asking to choose between import namespace and default for JavaScript and TypeScript.
+- Fixed alphabetical order of imports for JavaScript and TypeScript.
 
 ### 2.3.0
 - Added duplicate identifier resolution dialog for JavaScript and TypeScript.

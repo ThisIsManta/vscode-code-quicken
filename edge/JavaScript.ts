@@ -1170,9 +1170,9 @@ function getInsertionPosition(existingImports: Array<ImportStatementForReadOnly>
 	if (existingImports.length > 0) {
 		if (path.startsWith('.')) {
 			const fileImportList = existingImports.filter(stub => stub.path.startsWith('.'))
-			const targetImport = _.find(fileImportList, stub => stub.path.localeCompare(path) === 1)
+			const targetImport = _.findLast(fileImportList, stub => stub.path.localeCompare(path) === -1)
 			if (targetImport) {
-				return document.positionAt(targetImport.node.getStart())
+				return document.positionAt(targetImport.node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
 			} else if (fileImportList.length > 0) {
 				return document.positionAt(_.last(fileImportList).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
 			} else {
@@ -1181,9 +1181,9 @@ function getInsertionPosition(existingImports: Array<ImportStatementForReadOnly>
 
 		} else {
 			const nodeImportList = existingImports.filter(stub => stub.path.startsWith('.') === false)
-			const targetImport = _.find(nodeImportList, stub => stub.path.localeCompare(path) === 1)
+			const targetImport = _.findLast(nodeImportList, stub => stub.path.localeCompare(path) === -1)
 			if (targetImport) {
-				return document.positionAt(targetImport.node.getStart())
+				return document.positionAt(targetImport.node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
 			} else if (nodeImportList.length > 0) {
 				return document.positionAt(_.last(nodeImportList).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
 			} else {
