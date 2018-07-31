@@ -542,14 +542,13 @@ export class FileItem implements Item {
 
 	private async getImportPatternForJavaScript(existingImports: Array<ImportStatementForReadOnly>, document: vscode.TextDocument): Promise<{ name: string, path: string, kind: 'named' | 'namespace' | 'default' }> {
 		const options = this.language.options
-		const workspaceDirectory = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
 		const workingDirectory = fp.dirname(document.fileName)
 		const { name, path } = this.getNameAndRelativePath(document)
 
 		// Try writing import through the index file
 		const indexFilePath = getFilePath([this.fileInfo.directoryPath, 'index'], this.fileInfo.fileExtensionWithoutLeadingDot)
 		if (indexFilePath && indexFilePath.startsWith(workingDirectory) === false) {
-			const pickers: Array<vscode.QuickPickItem> = []
+			let pickers: Array<IdentifierItem> = []
 
 			const exportedIdentifiersFromIndexFile = getExportedIdentifiers(indexFilePath)
 			for (const [name, { text, pathList }] of exportedIdentifiersFromIndexFile) {
@@ -557,12 +556,7 @@ export class FileItem implements Item {
 					continue
 				}
 
-				const sourcePath = _.last(pathList)
-				pickers.push({
-					label: name,
-					description: sourcePath === this.fileInfo.fullPath ? null : _.trim(sourcePath.substring(workspaceDirectory.length), fp.sep),
-					detail: _.truncate(text, { length: 120, omission: '...' }),
-				})
+				pickers.push(new IdentifierItem(name, text, this.fileInfo.fullPath, pathList))
 			}
 
 			let indexFileRelativePath = new FileInfo(indexFilePath).getRelativePath(workingDirectory)
@@ -596,11 +590,26 @@ export class FileItem implements Item {
 				}
 			}
 
+			if (pickers.length === 1) {
+				if (pickers[0].defaultExported) {
+					return {
+						name,
+						path: indexFileRelativePath,
+						kind: 'default',
+					}
+
+				} else {
+					return {
+						name: pickers[0].label,
+						path: indexFileRelativePath,
+						kind: 'named',
+					}
+				}
+			}
+
 			if (pickers.length > 0) {
-				const selectedPicker = await vscode.window.showQuickPick(_.sortBy(
-					[{ label: '*' }, ...pickers],
-					item => item.label === 'default' ? '+' : item.label.toLowerCase() // Note that '+' comes after '*'
-				))
+				pickers = _.sortBy(pickers, picker => picker.sortingKey)
+				const selectedPicker = await vscode.window.showQuickPick([{ label: '*' }, ...pickers])
 
 				if (!selectedPicker) {
 					return null
@@ -613,7 +622,7 @@ export class FileItem implements Item {
 						kind: 'namespace',
 					}
 
-				} else if (selectedPicker.label === 'default') {
+				} else if ((selectedPicker as IdentifierItem).defaultExported) {
 					return {
 						name,
 						path: indexFileRelativePath,
@@ -654,21 +663,13 @@ export class FileItem implements Item {
 			}
 		}
 
-		let pickers: Array<vscode.QuickPickItem> = [{ label: '*' }]
+		let pickers: Array<IdentifierItem> = []
 		for (const [name, { text, pathList }] of exportedIdentifiers) {
-			const sourcePath = _.last(pathList)
-			pickers.push({
-				label: name,
-				description: sourcePath === this.fileInfo.fullPath ? null : _.trim(sourcePath.substring(workspaceDirectory.length), fp.sep),
-				detail: _.truncate(text, { length: 120, omission: '...' }),
-			})
+			pickers.push(new IdentifierItem(name, text, this.fileInfo.fullPath, pathList))
 		}
-		pickers = _.sortBy(
-			pickers,
-			item => item.label === 'default' ? '+' : item.label.toLowerCase() // Note that '+' comes after '*'
-		)
+		pickers = _.sortBy(pickers, picker => picker.sortingKey)
 
-		const selectedPicker = await vscode.window.showQuickPick(pickers)
+		const selectedPicker = await vscode.window.showQuickPick([{ label: '*' }, ...pickers])
 		if (!selectedPicker) {
 			return null
 		}
@@ -680,7 +681,7 @@ export class FileItem implements Item {
 				kind: 'namespace',
 			}
 
-		} else if (selectedPicker.label === 'default') {
+		} else if ((selectedPicker as IdentifierItem).defaultExported) {
 			return {
 				name,
 				path,
@@ -694,6 +695,26 @@ export class FileItem implements Item {
 				kind: 'named',
 			}
 		}
+	}
+}
+
+class IdentifierItem implements vscode.QuickPickItem {
+	label: string
+	description?: string
+	detail: string
+	defaultExported: boolean
+	sortingKey: string
+
+	constructor(name: string, text: string, currentFilePath: string, sourcePathList: Array<string>) {
+		this.label = name === '*default' ? 'default' : name
+		const sourcePath = _.last(sourcePathList)
+		if (sourcePath !== currentFilePath) {
+			const workspaceDirectory = vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri).uri.fsPath
+			this.description = _.trim(sourcePath.substring(workspaceDirectory.length), fp.sep)
+		}
+		this.detail = _.truncate(text, { length: 120, omission: '...' })
+		this.defaultExported = name === '*default'
+		this.sortingKey = name.toLowerCase()
 	}
 }
 
@@ -965,8 +986,8 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 
 				if (node.importClause.name) {
 					// import named from "path"
-					if (transitIdentifiers.has('default')) {
-						const { text, pathList } = transitIdentifiers.get('default')
+					if (transitIdentifiers.has('*default')) {
+						const { text, pathList } = transitIdentifiers.get('*default')
 						importedNames.set(node.importClause.name.text, { text, pathList: [path, ...pathList] })
 					} else {
 						importedNames.set(node.importClause.name.text, { text: null, pathList: [path] })
@@ -1037,9 +1058,9 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				// export default named
 				if (ts.isIdentifier(node.expression) && importedNames.has(node.expression.text)) {
 					const { text, pathList } = importedNames.get(node.expression.text)
-					exportedNames.set('default', { text, pathList: [filePath, ...pathList] })
+					exportedNames.set('*default', { text, pathList: [filePath, ...pathList] })
 				} else {
-					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
+					exportedNames.set('*default', { text: node.getText(), pathList: [filePath] })
 				}
 
 			} else if (
@@ -1049,7 +1070,7 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				if (node.modifiers.length > 1 && node.modifiers[1].kind === ts.SyntaxKind.DefaultKeyword) {
 					// export default function () {}
 					// export default function named () {}
-					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
+					exportedNames.set('*default', { text: node.getText(), pathList: [filePath] })
 
 				} else if (node.name) {
 					// export function named () {}
@@ -1081,9 +1102,9 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				// module.exports = { ... }
 				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
 					const { text, pathList } = importedNames.get(node.expression.right.text)
-					exportedNames.set('default', { text, pathList: [filePath, ...pathList] })
+					exportedNames.set('*default', { text, pathList: [filePath, ...pathList] })
 				} else {
-					exportedNames.set('default', { text: node.getText(), pathList: [filePath] })
+					exportedNames.set('*default', { text: node.getText(), pathList: [filePath] })
 				}
 
 			} else if (

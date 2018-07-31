@@ -56,7 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!progressWillShow) {
                 return
             }
-            vscode.window.withProgress({ title: 'Populating files...', location: vscode.ProgressLocation.Window }, async () => {
+            vscode.window.withProgress({ title: 'Populating Files...', location: vscode.ProgressLocation.Window }, async () => {
                 await new Promise(resolve => {
                     stopProgress = resolve
                 })
