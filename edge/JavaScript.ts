@@ -749,7 +749,7 @@ class NodeItem implements Item {
 			return null
 		}
 
-		const importClause = this.language.checkIfImportDefaultIsPreferredOverNamespace()
+		const importClause = await this.language.checkIfImportDefaultIsPreferredOverNamespace()
 			? this.name
 			: `* as ${this.name}`
 
@@ -1185,7 +1185,7 @@ function getInsertionPosition(existingImports: Array<ImportStatementForReadOnly>
 			if (targetImport) {
 				return document.positionAt(targetImport.node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
 			} else if (nodeImportList.length > 0) {
-				return document.positionAt(_.last(nodeImportList).node.getEnd()).translate({ lineDelta: +1 }).with({ character: 0 })
+				return document.positionAt(_.first(nodeImportList).node.getStart())
 			} else {
 				return document.positionAt(_.first(existingImports).node.getStart())
 			}

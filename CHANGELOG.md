@@ -1,3 +1,6 @@
+### 2.3.2
+- Fixed alphabetical order of imports for JavaScript and TypeScript.
+
 ### 2.3.1
 - Amended never asking to choose between import namespace and default for JavaScript and TypeScript.
 - Fixed alphabetical order of imports for JavaScript and TypeScript.
