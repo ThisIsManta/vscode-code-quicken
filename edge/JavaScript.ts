@@ -655,7 +655,7 @@ export class FileItem implements Item {
 				kind: 'namespace',
 			}
 
-		} else if (exportedIdentifiers.size === 1 && exportedIdentifiers.has('default')) {
+		} else if (exportedIdentifiers.size === 1 && exportedIdentifiers.has('*default')) {
 			return {
 				name,
 				path,
