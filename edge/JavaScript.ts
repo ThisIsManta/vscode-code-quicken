@@ -791,9 +791,9 @@ function getExistingImports(codeTree: ts.SourceFile) {
 		} else if (ts.isVariableStatement(node)) {
 			// For `var name = require('...')`
 			//     `var { name } = require('...')`
-			node.declarationList.declarations.forEach(node => {
-				if (ts.isVariableDeclaration(node) && node.initializer && getRequirePath(node.initializer)) {
-					imports.push({ node, path: getRequirePath(node.initializer) })
+			node.declarationList.declarations.forEach(stub => {
+				if (ts.isVariableDeclaration(stub) && stub.initializer && getRequirePath(stub.initializer)) {
+					imports.push({ node, path: getRequirePath(stub.initializer) })
 				}
 			})
 

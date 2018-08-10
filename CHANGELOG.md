@@ -1,3 +1,6 @@
+### 2.3.3
+- Fixed wrong insertion position for `require(...)`.
+
 ### 2.3.2
 - Fixed alphabetical order of imports for JavaScript and TypeScript.
 
