@@ -1,3 +1,6 @@
+### 2.3.4
+- Fixed missing re-exported named identifiers such `export { named } from "path"` for JavaScript and TypeScript.
+
 ### 2.3.3
 - Fixed wrong insertion position for `require(...)`.
 - Fixed unexpectedly showing selections for default import only.

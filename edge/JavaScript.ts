@@ -1024,12 +1024,12 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 							if (stub.propertyName && transitIdentifiers.has(stub.propertyName.text)) {
 								// export { named as exported } from "path"
 								const { text, pathList } = transitIdentifiers.get(stub.propertyName.text)
-								exportedNames.set(name, { text, pathList: [path, ...pathList] })
+								exportedNames.set(name, { text, pathList: [filePath, path, ...pathList] })
 
 							} else if (transitIdentifiers.has(name)) {
 								// export { named } from "path"
 								const { text, pathList } = transitIdentifiers.get(name)
-								exportedNames.set(name, { text, pathList: [path, ...pathList] })
+								exportedNames.set(name, { text, pathList: [filePath, path, ...pathList] })
 							}
 
 						} else {
