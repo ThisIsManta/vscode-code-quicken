@@ -52,45 +52,70 @@ export function activate(context: vscode.ExtensionContext) {
             return null
         }
 
+        // Show the progress bar if the operation takes too long
         let progressWillShow = true
-        let stopProgress = () => { progressWillShow = false }
+        let hideProgress = () => { progressWillShow = false }
         setTimeout(() => {
             if (!progressWillShow) {
                 return
             }
             vscode.window.withProgress({ title: 'Populating Files...', location: vscode.ProgressLocation.Window }, async () => {
                 await new Promise(resolve => {
-                    stopProgress = resolve
+                    hideProgress = resolve
                 })
             })
         }, 150)
 
         for (let language of languages) {
-            let items = await language.getItems(document)
-            if (!items) {
+            const totalItems = await language.getItems(document)
+            if (!totalItems) {
                 continue
             }
 
             // Stop processing if the active editor has been changed
             if (editor !== vscode.window.activeTextEditor) {
-                stopProgress()
+                hideProgress()
                 return null
             }
 
-            items = localStorage.recentSelectedItems.sort(language, items) as Array<Item>
+            const recentItems = localStorage.recentSelectedItems.get(language, totalItems)
+            const frontItems = recentItems.length > 0 ? recentItems : totalItems.slice(0, 100)
 
-            stopProgress()
+            hideProgress()
 
-            const selectedItem = await vscode.window.showQuickPick(items, { matchOnDescription: true, placeHolder: 'Type a file path or node module name' })
-            if (!selectedItem) {
-                return null
-            }
+            const picker = vscode.window.createQuickPick<Item>()
+            picker.placeholder = 'Type a file path or node module name'
+            picker.items = frontItems
+            picker.matchOnDescription = true
+            picker.onDidChangeValue(() => {
+                if (picker.value.trim().length > 0 && picker.items !== totalItems) {
+                    picker.items = totalItems
 
-            localStorage.recentSelectedItems.markAsRecentlyUsed(language, selectedItem)
+                } else if (picker.value.trim().length === 0 && picker.items !== frontItems) {
+                    picker.items = frontItems
+                }
+            })
+            picker.onDidAccept(async () => {
+                picker.hide()
 
-            // Insert the snippet
-            await selectedItem.addImport(editor)
+                const [selectedItem] = picker.selectedItems
+                if (!selectedItem) {
+                    return null
+                }
+
+                localStorage.recentSelectedItems.markAsRecentlyUsed(language, selectedItem)
+
+                // Insert the snippet
+                await selectedItem.addImport(editor)
+
+                picker.dispose()
+            })
+            picker.show()
+
+            break
         }
+
+        hideProgress()
     }))
 
     context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.fixImport', async () => {

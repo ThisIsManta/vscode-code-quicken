@@ -1,6 +1,8 @@
 ### 2.4.0
 - Added support of **@types** definitions for JavaScript and TypeScript.
 - Added support of [Yarn Workspaces](https://yarnpkg.com/lang/en/docs/workspaces/).
+- Amended the import/require list so it shows the recently used items when no search words.
+- Amended `codeQuicken.history` setting so it has the default of 20.
 - Fixed clearing node module cache automatically.
 
 ### 2.3.4

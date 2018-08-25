@@ -13,21 +13,13 @@ export default class RecentSelectedItems {
 		return this.data.has(language.constructor.name) && this.data.get(language.constructor.name).length > 0
 	}
 
-	sort(language: Language, items: Array<Item>) {
+	get(language: Language, items: Array<Item>) {
 		if (this.has(language) === false) {
-			return items
+			return []
 		}
 
-		const list = this.data.get(language.constructor.name)
-		const hash = list.reduce((hash, id, rank) => {
-			hash[id] = rank
-			return hash
-		}, {})
-
-		return _.sortBy(items, item => {
-			const rank = hash[item.id]
-			return rank === undefined ? Infinity : rank
-		})
+		const hash = _.keyBy(items, 'id')
+		return this.data.get(language.constructor.name).map(id => hash[id])
 	}
 
 	markAsRecentlyUsed(language: Language, selectedItem: Item) {

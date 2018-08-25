@@ -26,7 +26,7 @@
         "theme": "light"
     },
     "engines": {
-        "vscode": "^1.22.2"
+        "vscode": "^1.26.0"
     },
     "activationEvents": [
         "onCommand:codeQuicken.addImport",
@@ -48,11 +48,11 @@
             "title": "Code Quicken",
             "properties": {
                 "codeQuicken.history": {
-                    "description": "Set the maximum number of recently selected items when adding an import/require statement.",
+                    "description": "Set the maximum number of the recently used items when no search words.",
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 50,
-                    "default": 1
+                    "maximum": 20,
+                    "default": 20
                 },
                 "codeQuicken.javascript.syntax": {
                     "description": "Insert either ES2015's import or AMD's require syntax. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
@@ -250,14 +250,14 @@
     },
     "devDependencies": {
         "@types/glob": "^5.0.35",
-        "@types/lodash": "^4.14.112",
+        "@types/lodash": "^4.14.116",
         "@types/node": "^8.0.24",
-        "vscode": "^1.1.18"
+        "vscode": "^1.1.21"
     },
     "dependencies": {
         "glob": "^7.1.2",
         "lodash": "^4.17.10",
         "stylus": "^0.54.5",
-        "typescript": "^2.9.2"
+        "typescript": "^3.0.1"
     }
 }
