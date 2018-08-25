@@ -432,7 +432,6 @@ export class FileItem implements Item {
 							await JavaScript.fixESLint()
 							return null
 
-
 						} else if (ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
 							// Try merging `{ named }` with `{ named }`
 							if (duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === name)) {
@@ -448,6 +447,7 @@ export class FileItem implements Item {
 									return null
 
 								} else {
+									// Try merging `{ named }` with `{ }`
 									const position = document.positionAt(duplicateImport.node.importClause.namedBindings.getEnd() - 1)
 									await editor.edit(worker => worker.insert(position, name))
 									await JavaScript.fixESLint()
@@ -739,23 +739,172 @@ class NodeItem implements Item {
 		const options = this.language.options
 		const document = editor.document
 
-		const codeTree = JavaScript.parse(document)
+		const importDefaultIsPreferred = await this.language.checkIfImportDefaultIsPreferredOverNamespace()
+		const typeDefinitions = await this.getTypeDefinitions(document)
 
+		const codeTree = JavaScript.parse(document)
 		const existingImports = getExistingImports(codeTree)
 		const duplicateImport = existingImports.find(item => item.path === this.path)
 		if (duplicateImport) {
-			vscode.window.showErrorMessage(`The module "${this.path}" has been already imported.`, { modal: true })
-			focusAt(duplicateImport.node, document)
-			return null
+			if (
+				typeDefinitions.length === 0 ||
+				!ts.isImportDeclaration(duplicateImport.node) ||
+				!duplicateImport.node.importClause ||
+				(
+					duplicateImport.node.importClause.namedBindings &&
+					ts.isNamespaceImport(duplicateImport.node.importClause.namedBindings)
+				)
+			) {
+				vscode.window.showErrorMessage(`The module "${this.path}" has been already imported.`, { modal: true })
+				focusAt(duplicateImport.node, document)
+				return null
+			}
+
+			const selectedIdentifier = await vscode.window.showQuickPick([
+				...(importDefaultIsPreferred ? ['default'] : []),
+				...typeDefinitions
+			])
+			if (!selectedIdentifier) {
+				return null
+			}
+
+			if (selectedIdentifier === 'default') {
+				if (duplicateImport.node.importClause.name) {
+					// Try merging `default` with `default`
+					vscode.window.showErrorMessage(`The module "${this.path}" has been already imported.`, { modal: true })
+					focusAt(duplicateImport.node, document)
+					return null
+
+				} else if (duplicateImport.node.importClause.namedBindings && ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
+					// Try merging `default` with `{ named }`
+					const position = document.positionAt(duplicateImport.node.importClause.namedBindings.getStart())
+					await editor.edit(worker => worker.insert(position, this.name + ', '))
+					await JavaScript.fixESLint()
+					return null
+				}
+
+			} else {
+				if (duplicateImport.node.importClause.namedBindings && ts.isNamedImports(duplicateImport.node.importClause.namedBindings)) {
+					// Try merging `{ named }` with `{ named }`
+					if (duplicateImport.node.importClause.namedBindings.elements.some(node => node.name.text === selectedIdentifier)) {
+						vscode.window.showErrorMessage(`The module "${selectedIdentifier}" has been already imported.`, { modal: true })
+						focusAt(duplicateImport.node, document)
+						return null
+
+					} else {
+						if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
+							const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).getEnd())
+							await editor.edit(worker => worker.insert(position, ', ' + selectedIdentifier))
+							await JavaScript.fixESLint()
+							return null
+
+						} else {
+							// Try merging `{ named }` with `{ }`
+							const position = document.positionAt(duplicateImport.node.importClause.namedBindings.getEnd() - 1)
+							await editor.edit(worker => worker.insert(position, selectedIdentifier))
+							await JavaScript.fixESLint()
+							return null
+						}
+					}
+
+				} else if (duplicateImport.node.importClause.name) {
+					// Try merging `{ named }` with `default`
+					const position = document.positionAt(duplicateImport.node.importClause.name.getEnd())
+					await editor.edit(worker => worker.insert(position, ', { ' + selectedIdentifier + ' }'))
+					await JavaScript.fixESLint()
+					return null
+				}
+			}
 		}
 
-		const importClause = await this.language.checkIfImportDefaultIsPreferredOverNamespace()
-			? this.name
-			: `* as ${this.name}`
+		let importClause: string
+		if (typeDefinitions.length === 0) {
+			if (importDefaultIsPreferred) {
+				importClause = this.name
+			} else {
+				importClause = `* as ${this.name}`
+			}
+
+		} else {
+			const select = await vscode.window.showQuickPick([
+				importDefaultIsPreferred ? 'default' : '*',
+				...typeDefinitions
+			])
+			if (!select) {
+				return null
+			}
+			if (select === 'default') {
+				importClause = this.name
+			} else if (select === '*') {
+				importClause = `* as ${this.name}`
+			} else {
+				importClause = '{ ' + select + ' }'
+			}
+		}
 
 		const snippet = await getImportOrRequireSnippet(this.name, importClause, this.path, options, codeTree, document)
 		await editor.edit(worker => worker.insert(getInsertionPosition(existingImports, this.path, document), snippet))
 		await JavaScript.fixESLint()
+	}
+
+	private async getTypeDefinitions(document: vscode.TextDocument) {
+		const packageLinkList = await vscode.workspace.findFiles('**/package.json', '**/node_modules/**')
+		const definitionPathList = _.chain(packageLinkList)
+			.map(link => link.fsPath)
+			.filter(path => document.fileName.startsWith(fp.dirname(path)))
+			.sortBy(path => -path.split(fp.sep).length)
+			.map(path => fp.join(fp.dirname(path), 'node_modules', '@types/' + this.label, 'index.d.ts'))
+			.value()
+
+		const definitionPath = definitionPathList.find(path => fs.existsSync(path))
+		if (definitionPath === undefined) {
+			return []
+		}
+
+		try {
+			const codeTree = JavaScript.parse(definitionPath)
+			const typeDefinitions: Array<string> = []
+
+			let globallyExportedIdentifier: string = null
+			codeTree.forEachChild(node => {
+				if (ts.isModuleDeclaration(node) && node.name.text === this.label && node.body && ts.isModuleBlock(node.body)) {
+					// Find `declare module '???' { ... }` where ??? is the module name
+					node.body.forEachChild(node => {
+						if (node.modifiers && node.modifiers.some(node => node.kind === ts.SyntaxKind.ExportKeyword) && (node as any).name) {
+							// Gather all `export` members
+							typeDefinitions.push((node as any).name.text)
+						}
+					})
+
+				} else if (ts.isNamespaceExportDeclaration(node)) {
+					// Find `export as namespace ???`
+					globallyExportedIdentifier = node.name.text
+				}
+			})
+
+			if (globallyExportedIdentifier) {
+				// Gather all members inside `declare namespace ??? { ... }`
+				findNodesRecursively<ts.ModuleDeclaration>(codeTree, node => (
+					ts.isModuleDeclaration(node) &&
+					node.modifiers &&
+					node.modifiers.some(node => node.kind === ts.SyntaxKind.DeclareKeyword) &&
+					node.name.text === globallyExportedIdentifier &&
+					node.body &&
+					ts.isModuleBlock(node.body)
+				)).forEach(({ body }) => {
+					body.forEachChild((node: any) => {
+						if (node.name) {
+							typeDefinitions.push(node.name.text)
+						}
+					})
+				})
+			}
+
+			return _.chain(typeDefinitions).compact().uniq().sortBy().value()
+
+		} catch (ex) {
+			return []
+		}
 	}
 }
 
