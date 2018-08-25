@@ -1,5 +1,7 @@
 ### 2.4.0
 - Added support of **@types** definitions for JavaScript and TypeScript.
+- Added support of [Yarn Workspaces](https://yarnpkg.com/lang/en/docs/workspaces/).
+- Fixed clearing node module cache automatically.
 
 ### 2.3.4
 - Fixed missing re-exported named identifiers such `export { named } from "path"` for JavaScript and TypeScript.

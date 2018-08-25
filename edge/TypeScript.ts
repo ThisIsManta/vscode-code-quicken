@@ -9,7 +9,7 @@ import * as ts from 'typescript'
 const JAVASCRIPT_EXTENSION = /\.jsx?$/i
 
 export default class TypeScript extends JavaScript {
-	constructor(config: Configurations) {
+	constructor(config: Configurations, fileWatch: vscode.FileSystemWatcher) {
 		super({
 			...config,
 			javascript: {
@@ -20,7 +20,7 @@ export default class TypeScript extends JavaScript {
 				},
 				syntax: 'import',
 			}
-		})
+		}, fileWatch)
 
 		this.acceptedLanguage = /^typescript(react)?/
 	}

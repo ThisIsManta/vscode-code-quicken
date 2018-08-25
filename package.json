@@ -249,11 +249,13 @@
         "postversion": "git push --tags --quiet origin master:master"
     },
     "devDependencies": {
+        "@types/glob": "^5.0.35",
         "@types/lodash": "^4.14.112",
         "@types/node": "^8.0.24",
         "vscode": "^1.1.18"
     },
     "dependencies": {
+        "glob": "^7.1.2",
         "lodash": "^4.17.10",
         "stylus": "^0.54.5",
         "typescript": "^2.9.2"

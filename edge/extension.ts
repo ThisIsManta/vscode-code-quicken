@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { Configurations, Language, Item } from './global';
+import { Configurations, Language, Item } from './global'
 import LocalStorage from './LocalStorage'
 import JavaScript from './JavaScript'
 import TypeScript from './TypeScript'
@@ -11,8 +11,19 @@ let fileWatch: vscode.FileSystemWatcher
 let localStorage = new LocalStorage()
 
 export function activate(context: vscode.ExtensionContext) {
-    let config: Configurations
+    fileWatch = vscode.workspace.createFileSystemWatcher('**/*')
+    fileWatch.onDidCreate(e => {
+        languages.forEach(language => {
+            language.addItem ? language.addItem(e.fsPath) : language.reset()
+        })
+    })
+    fileWatch.onDidDelete(e => {
+        languages.forEach(language => {
+            language.cutItem ? language.cutItem(e.fsPath) : language.reset()
+        })
+    })
 
+    let config: Configurations
     function initialize() {
         config = vscode.workspace.getConfiguration().get<Configurations>('codeQuicken')
 
@@ -24,22 +35,13 @@ export function activate(context: vscode.ExtensionContext) {
 
         languages = [
             // Add new supported languages here
-            new JavaScript(config),
-            new TypeScript(config),
+            new JavaScript(config, fileWatch),
+            new TypeScript(config, fileWatch),
             new Stylus(config),
         ]
     }
-
     initialize()
     vscode.workspace.onDidChangeConfiguration(initialize)
-
-    fileWatch = vscode.workspace.createFileSystemWatcher('**/*', false, true, false)
-    fileWatch.onDidCreate(e => {
-        languages.forEach(language => language.addItem ? language.addItem(e.fsPath) : language.reset())
-    })
-    fileWatch.onDidDelete(e => {
-        languages.forEach(language => language.cutItem ? language.cutItem(e.fsPath) : language.reset())
-    })
 
     context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.addImport', async function () {
         const editor = vscode.window.activeTextEditor

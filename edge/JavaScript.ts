@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as fp from 'path'
+import * as glob from 'glob';
 import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as ts from 'typescript'
@@ -23,14 +24,20 @@ const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
 
 export default class JavaScript implements Language {
 	private fileItemCache: Array<FileItem>
-	private nodeItemCache: Array<NodeItem>
+	private nodeItemCache = new Map<string, Array<NodeItem>>()
 
 	protected acceptedLanguage = /^javascript(react)?$/
 
 	public options: LanguageOptions
 
-	constructor(config: Configurations) {
+	constructor(config: Configurations, fileWatch: vscode.FileSystemWatcher) {
 		this.options = config.javascript
+
+		fileWatch.onDidChange(e => {
+			if (fp.basename(e.fsPath) === 'package.json') {
+				this.nodeItemCache.delete(e.fsPath)
+			}
+		})
 	}
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
@@ -73,23 +80,15 @@ export default class JavaScript implements Language {
 		}
 
 		// Sort files by their path and name
-		const sortedItems = _.sortBy(filteredItems, [
+		const sortedFileItems = _.sortBy(filteredItems, [
 			item => item.sortablePath,
 			item => item.sortableName,
 		])
 
-		if (!this.nodeItemCache) {
-			const packageJsonLinkList = await vscode.workspace.findFiles('**/package.json')
-			let packageJson: any = {}
-			if (packageJsonLinkList.length > 0) {
-				const packageJsonPath = _.chain(packageJsonLinkList)
-					.map(link => link.fsPath)
-					.sortBy(path => -fp.dirname(path).split(fp.sep).length)
-					.find(path => document.fileName.startsWith(fp.dirname(path) + fp.sep))
-					.value()
-				packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
-			}
-
+		const possibleModulePathList = await getPossibleModulePathList(document)
+		const [packageJsonPath] = possibleModulePathList.map(path => fp.join(path, 'package.json'))
+		if (packageJsonPath && this.nodeItemCache.has(packageJsonPath) === false) {
+			const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
 			const dependencies = _.chain([packageJson.devDependencies, packageJson.dependencies])
 				.map(_.keys)
 				.flatten()
@@ -97,19 +96,25 @@ export default class JavaScript implements Language {
 
 			let nodeJsAPIs: Array<NodeItem> = []
 			if (dependencies.some(name => name === '@types/node')) {
-				const nodeJsVersion = getLocalModuleVersion('@types/node', rootPath)
-				nodeJsAPIs = getNodeJsAPIs(rootPath).map(name => new NodeItem(name, nodeJsVersion, this))
+				const nodeJsVersion = getLocalModuleVersion('@types/node', possibleModulePathList)
+				nodeJsAPIs = getNodeJsAPIs(possibleModulePathList).map(name => new NodeItem(name, nodeJsVersion, this))
 			}
 
-			this.nodeItemCache = _.chain(dependencies)
-				.reject(name => name.startsWith('@types/'))
-				.map(name => new NodeItem(name, getLocalModuleVersion(name, rootPath), this))
-				.concat(nodeJsAPIs)
-				.sortBy(item => item.name)
-				.value()
+			this.nodeItemCache.set(
+				packageJsonPath,
+				_.chain(dependencies)
+					.reject(name => name.startsWith('@types/'))
+					.map(name => new NodeItem(name, getLocalModuleVersion(name, possibleModulePathList), this))
+					.concat(nodeJsAPIs)
+					.sortBy(item => item.name)
+					.value()
+			)
 		}
 
-		return [...sortedItems, ...(this.nodeItemCache || [])] as Array<Item>
+		return [
+			...sortedFileItems,
+			...(this.nodeItemCache.get(packageJsonPath) || [])
+		] as Array<Item>
 	}
 
 	addItem(filePath: string) {
@@ -848,15 +853,9 @@ class NodeItem implements Item {
 	}
 
 	private async getTypeDefinitions(document: vscode.TextDocument) {
-		const packageLinkList = await vscode.workspace.findFiles('**/package.json', '**/node_modules/**')
-		const definitionPathList = _.chain(packageLinkList)
-			.map(link => link.fsPath)
-			.filter(path => document.fileName.startsWith(fp.dirname(path)))
-			.sortBy(path => -path.split(fp.sep).length)
-			.map(path => fp.join(fp.dirname(path), 'node_modules', '@types/' + this.label, 'index.d.ts'))
-			.value()
-
-		const definitionPath = definitionPathList.find(path => fs.existsSync(path))
+		const definitionPath = (await getPossibleModulePathList(document))
+			.map(path => fp.join(path, 'node_modules', '@types/' + this.label, 'index.d.ts'))
+			.find(path => fs.existsSync(path))
 		if (definitionPath === undefined) {
 			return []
 		}
@@ -1379,37 +1378,85 @@ function focusAt(node: { getStart: () => number, getEnd: () => number }, documen
 	)
 }
 
-function getLocalModuleVersion(name: string, rootPath: string) {
-	try {
-		const packageJson = JSON.parse(fs.readFileSync(fp.join(rootPath, 'node_modules', name, 'package.json'), 'utf-8'))
-		if (packageJson.version) {
-			return packageJson.version as string
+function getLocalModuleVersion(name: string, possibleModulePathList: Array<string>) {
+	for (const modulePath of possibleModulePathList) {
+		try {
+			const packageJson = JSON.parse(fs.readFileSync(fp.join(modulePath, 'node_modules', name, 'package.json'), 'utf-8'))
+			if (packageJson.version) {
+				return packageJson.version as string
+			}
+		} catch (ex) {
+			// Do nothing
 		}
-	} catch (ex) {
-		// Do nothing
 	}
 	return null
 }
 
-function getNodeJsAPIs(rootPath: string) {
-	try {
-		const codeTree = JavaScript.parse(fp.join(rootPath, 'node_modules', '@types/node', 'index.d.ts'))
-		return _.compact(codeTree.statements.map(node => {
-			if (
-				ts.isModuleDeclaration(node) &&
-				node.modifiers && node.modifiers.length > 0 &&
-				node.modifiers[0].kind === ts.SyntaxKind.DeclareKeyword &&
-				(ts.isStringLiteral(node.name) || ts.isIdentifier(node.name))
-			) {
-				// declare module "name" { ... }
-				return node.name.text
-			}
-		}))
+function getNodeJsAPIs(possibleModulePathList: Array<string>) {
+	for (const modulePath of possibleModulePathList) {
+		try {
+			const codeTree = JavaScript.parse(fp.join(modulePath, 'node_modules', '@types/node', 'index.d.ts'))
+			return _.compact(codeTree.statements.map(node => {
+				if (
+					ts.isModuleDeclaration(node) &&
+					node.modifiers && node.modifiers.length > 0 &&
+					node.modifiers[0].kind === ts.SyntaxKind.DeclareKeyword &&
+					(ts.isStringLiteral(node.name) || ts.isIdentifier(node.name))
+				) {
+					// Return ??? in `declare module "???" { ... }`
+					return node.name.text
+				}
+			}))
 
-	} catch (ex) {
-		console.error(ex)
+		} catch (ex) {
+			console.error(ex)
+		}
 	}
 	return []
+}
+
+async function getPossibleModulePathList(document: vscode.TextDocument) {
+	const packageJsonPath = _.chain(await vscode.workspace.findFiles('**/package.json', '**/node_modules/**'))
+		.map(link => link.fsPath)
+		.filter(path => document.fileName.startsWith(fp.dirname(path) + fp.sep))
+		.maxBy(path => fp.dirname(path).split(fp.sep).length)
+		.value()
+
+	const yarnLockPath = _.chain(await vscode.workspace.findFiles('**/yarn.lock', '**/node_modules/**'))
+		.map(link => link.fsPath)
+		.filter(path => document.fileName.startsWith(fp.dirname(path) + fp.sep))
+		.maxBy(path => fp.dirname(path).split(fp.sep).length)
+		.value()
+
+	const possibleModulePathList = [fp.dirname(packageJsonPath)]
+	if (checkYarnWorkspace(packageJsonPath, yarnLockPath)) {
+		possibleModulePathList.push(fp.dirname(yarnLockPath))
+	}
+	return possibleModulePathList
+}
+
+// Copy from https://github.com/ThisIsManta/vscode-package-watch/blob/master/edge/extension.ts
+function checkYarnWorkspace(packageJsonPath: string, yarnLockPath: string) {
+	if (!packageJsonPath || !yarnLockPath) {
+		return false
+	}
+
+	// See https://yarnpkg.com/lang/en/docs/workspaces/
+	const packageJsonForYarnWorkspace = JSON.parse(fs.readFileSync(fp.join(fp.dirname(yarnLockPath), 'package.json'), 'utf-8')) as { private?: boolean, workspaces?: Array<string> }
+	if (!packageJsonForYarnWorkspace || packageJsonForYarnWorkspace.private !== true || !packageJsonForYarnWorkspace.workspaces) {
+		return false
+	}
+
+	const yarnWorkspacePathList = _.chain(packageJsonForYarnWorkspace.workspaces)
+		.map(pathOrGlob => glob.sync(pathOrGlob, { cwd: fp.dirname(yarnLockPath), absolute: true }))
+		.flatten()
+		.map(path => path.replace(/\//g, fp.sep))
+		.value()
+	if (_.includes(yarnWorkspacePathList, fp.dirname(packageJsonPath))) {
+		return true
+	}
+
+	return false
 }
 
 // Copy from https://mathiasbynens.be/demo/javascript-identifier-regex
