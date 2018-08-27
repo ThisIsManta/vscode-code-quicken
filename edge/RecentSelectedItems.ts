@@ -19,7 +19,10 @@ export default class RecentSelectedItems {
 		}
 
 		const hash = _.keyBy(items, 'id')
-		return this.data.get(language.constructor.name).map(id => hash[id])
+		return _.chain(this.data.get(language.constructor.name))
+			.map(id => hash[id])
+			.compact()
+			.value()
 	}
 
 	markAsRecentlyUsed(language: Language, selectedItem: Item) {

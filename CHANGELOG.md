@@ -1,3 +1,6 @@
+### 2.4.1
+- Fixed error populating the import/require list because of the recently used items.
+
 ### 2.4.0
 - Added support of **@types** definitions for JavaScript and TypeScript.
 - Added support of [Yarn Workspaces](https://yarnpkg.com/lang/en/docs/workspaces/).
