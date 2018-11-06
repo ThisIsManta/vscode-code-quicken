@@ -1,3 +1,7 @@
+### 2.4.2
+- Added ability to place a named import in alphabetically order.
+- Added ability to place a named import with a new line according to its surrounding.
+
 ### 2.4.1
 - Fixed error populating the import/require list because of the recently used items.
 

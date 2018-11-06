@@ -446,8 +446,7 @@ export class FileItem implements Item {
 
 							} else {
 								if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
-									const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).getEnd())
-									await editor.edit(worker => worker.insert(position, ', ' + name))
+									await insertNamedImportToExistingImports(name, duplicateImport.node.importClause.namedBindings.elements, editor)
 									await JavaScript.fixESLint()
 									return null
 
@@ -798,8 +797,7 @@ class NodeItem implements Item {
 
 					} else {
 						if (duplicateImport.node.importClause.namedBindings.elements.length > 0) {
-							const position = document.positionAt(_.last(duplicateImport.node.importClause.namedBindings.elements).getEnd())
-							await editor.edit(worker => worker.insert(position, ', ' + selectedIdentifier))
+							await insertNamedImportToExistingImports(selectedIdentifier, duplicateImport.node.importClause.namedBindings.elements, editor)
 							await JavaScript.fixESLint()
 							return null
 
@@ -952,6 +950,43 @@ function getExistingImports(codeTree: ts.SourceFile) {
 	})
 
 	return imports
+}
+
+async function insertNamedImportToExistingImports(name: string, existingImports: ts.NodeArray<ts.ImportSpecifier>, editor: vscode.TextEditor) {
+	const { document } = editor
+	const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+
+	for (let index = 0; index < existingImports.length; index++) {
+		if (name > existingImports[index].name.text) {
+			continue
+		}
+
+		let separator = ', '
+		const [prevImportLineNumber, thisImportLineNumber, nextImportLineNumber] =
+			[existingImports[index - 1], existingImports[index], existingImports[index + 1]].map(item => item ? document.positionAt(item.getStart()).line : null)
+		if (
+			nextImportLineNumber !== null && thisImportLineNumber !== nextImportLineNumber ||
+			prevImportLineNumber !== null && prevImportLineNumber !== thisImportLineNumber
+		) {
+			separator = ',' + lineEnding + document.lineAt(thisImportLineNumber).text.match(/^(\s|\t)*/)[0]
+		}
+
+		const position = document.positionAt(existingImports[index].getStart())
+		await editor.edit(worker => worker.insert(position, name + separator))
+		return
+	}
+
+	let separator = ', '
+	if (existingImports.length > 1) {
+		const lastImportLineNumber = document.positionAt(existingImports[existingImports.length - 1].getStart()).line
+		const prevImportLineNumber = document.positionAt(existingImports[existingImports.length - 2].getStart()).line
+		if (lastImportLineNumber !== prevImportLineNumber) {
+			separator = ',' + lineEnding + document.lineAt(lastImportLineNumber).text.match(/^(\s|\t)*/)[0]
+		}
+	}
+
+	const position = document.positionAt(existingImports[existingImports.length - 1].getEnd())
+	await editor.edit(worker => worker.insert(position, separator + name))
 }
 
 function getVariableName(name: string, options: LanguageOptions) {
