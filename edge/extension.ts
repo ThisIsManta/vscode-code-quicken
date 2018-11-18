@@ -122,6 +122,11 @@ export function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.activeTextEditor
         const document = editor.document
 
+        // Stop processing if the VS Code is not working with folder, or the current document is untitled
+        if (editor === undefined || document.isUntitled || vscode.workspace.getWorkspaceFolder(document.uri) === undefined) {
+            return null
+        }
+
         const cancellationEvent = new vscode.CancellationTokenSource()
         const editorChangeEvent = vscode.window.onDidChangeActiveTextEditor(() => {
             cancellationEvent.cancel()
@@ -153,6 +158,20 @@ export function activate(context: vscode.ExtensionContext) {
         editorChangeEvent.dispose()
         documentCloseEvent.dispose()
         cancellationEvent.dispose()
+    }))
+
+    context.subscriptions.push(vscode.commands.registerCommand('codeQuicken.convertImport', async () => {
+        const editor = vscode.window.activeTextEditor
+
+        if (editor === undefined) {
+            return null
+        }
+
+        for (const language of languages) {
+            if (language.convertImport && await language.convertImport(editor)) {
+                return null
+            }
+        }
     }))
 }
 

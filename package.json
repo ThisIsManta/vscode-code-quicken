@@ -30,18 +30,26 @@
     },
     "activationEvents": [
         "onCommand:codeQuicken.addImport",
-        "onCommand:codeQuicken.fixImport"
+        "onCommand:codeQuicken.fixImport",
+        "onCommand:codeQuicken.convertImport"
     ],
     "main": "./dist/extension",
     "contributes": {
         "commands": [
             {
                 "command": "codeQuicken.addImport",
-                "title": "Code Quicken: Insert an import/require statement"
+                "title": "Insert Import/Require",
+                "category": "Code Quicken"
             },
             {
                 "command": "codeQuicken.fixImport",
-                "title": "Code Quicken: Fix broken import/require statements"
+                "title": "Fix Import/Require",
+                "category": "Code Quicken"
+            },
+            {
+                "command": "codeQuicken.convertImport",
+                "title": "Convert Require To Import",
+                "category": "Code Quicken"
             }
         ],
         "configuration": {

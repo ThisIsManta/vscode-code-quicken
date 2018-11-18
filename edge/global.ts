@@ -17,6 +17,7 @@ export interface Language {
 	addItem?(filePath: string): void
 	cutItem?(filePath: string): void
 	fixImport?(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken): Promise<boolean | null>
+	convertImport?(editor: vscode.TextEditor): Promise<boolean | null>
 	reset(): void
 }
 

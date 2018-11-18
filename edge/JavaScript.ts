@@ -290,6 +290,90 @@ export default class JavaScript implements Language {
 			return null
 		}
 	}
+
+	async convertImport(editor: vscode.TextEditor) {
+		const document = editor.document
+
+		if (this.acceptedLanguage.test(document.languageId) === false) {
+			return null
+		}
+
+		const codeTree = JavaScript.parse(document)
+		if (!codeTree) {
+			return null
+		}
+
+		for (const statement of Array.from(codeTree.statements).reverse()) {
+			if (!ts.isVariableStatement(statement)) {
+				continue
+			}
+
+			const importList: Array<string> = []
+
+			for (const node of statement.declarationList.declarations) {
+				if (!node.initializer) {
+					continue
+				}
+
+				let moduleName = node.name.getText().trim()
+
+				let modulePath: string
+				if (
+					ts.isCallExpression(node.initializer) &&
+					ts.isIdentifier(node.initializer.expression) &&
+					node.initializer.expression.text === 'require' &&
+					node.initializer.arguments.length === 1
+				) {
+					const [firstArgument] = node.initializer.arguments
+					if (ts.isStringLiteral(firstArgument)) {
+						modulePath = firstArgument.text
+					}
+
+				} else if (
+					ts.isPropertyAccessExpression(node.initializer) &&
+					ts.isCallExpression(node.initializer.expression) &&
+					ts.isIdentifier(node.initializer.expression.expression) &&
+					node.initializer.expression.expression.text === 'require' &&
+					node.initializer.expression.arguments.length === 1
+				) {
+					const [firstArgument] = node.initializer.expression.arguments
+					if (ts.isStringLiteral(firstArgument)) {
+						modulePath = firstArgument.text
+					}
+
+					const moduleSuffix = node.initializer.name.text.trim()
+					if (moduleSuffix !== 'default' && ts.isObjectBindingPattern(node.name)) {
+						if (node.name.elements.length !== 1) {
+							continue
+						}
+
+						const [firstName] = node.name.elements
+						if (!ts.isIdentifier(firstName)) {
+							continue
+						}
+
+						moduleName = '{ ' + moduleSuffix + ' as ' + firstName.text.trim() + '}'
+					}
+				}
+
+				if (moduleName && modulePath) {
+					importList.push(`import ${moduleName} from '${modulePath}'`)
+				}
+			}
+
+			if (importList.length > 0) {
+				const statementEnding = (this.options.semiColons === 'always' || this.options.semiColons === 'auto' && await hasSemiColon(codeTree)) ? ';' : ''
+
+				const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+
+				const importText = importList.join(statementEnding + lineEnding)
+				await editor.edit(worker => worker.replace(
+					new vscode.Range(document.positionAt(statement.getStart()), document.positionAt(statement.getEnd())),
+					importText
+				))
+			}
+		}
+	}
 }
 
 export class FileItem implements Item {
