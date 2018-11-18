@@ -303,16 +303,19 @@ export default class JavaScript implements Language {
 			return null
 		}
 
+
 		for (const statement of Array.from(codeTree.statements).reverse()) {
 			if (!ts.isVariableStatement(statement)) {
 				continue
 			}
-
+			
 			const importList: Array<string> = []
+			let oneOrMoreStatementsAreUnableToConvert = false
 
 			for (const node of statement.declarationList.declarations) {
 				if (!node.initializer) {
-					continue
+					oneOrMoreStatementsAreUnableToConvert = true
+					break
 				}
 
 				let moduleName = node.name.getText().trim()
@@ -339,39 +342,64 @@ export default class JavaScript implements Language {
 					const [firstArgument] = node.initializer.expression.arguments
 					if (ts.isStringLiteral(firstArgument)) {
 						modulePath = firstArgument.text
-					}
 
-					const moduleSuffix = node.initializer.name.text.trim()
-					if (moduleSuffix !== 'default' && ts.isObjectBindingPattern(node.name)) {
-						if (node.name.elements.length !== 1) {
-							continue
+						const moduleSuffix = node.initializer.name.text.trim()
+						if (moduleSuffix !== 'default' && ts.isObjectBindingPattern(node.name)) {
+							if (node.name.elements.length !== 1) {
+								oneOrMoreStatementsAreUnableToConvert = true
+								break
+							}
+
+							const [firstName] = node.name.elements
+							if (!ts.isIdentifier(firstName)) {
+								oneOrMoreStatementsAreUnableToConvert = true
+								break
+							}
+
+							moduleName = '{ ' + moduleSuffix + ' as ' + firstName.text.trim() + '}'
 						}
-
-						const [firstName] = node.name.elements
-						if (!ts.isIdentifier(firstName)) {
-							continue
-						}
-
-						moduleName = '{ ' + moduleSuffix + ' as ' + firstName.text.trim() + '}'
 					}
 				}
 
-				if (moduleName && modulePath) {
-					importList.push(`import ${moduleName} from '${modulePath}'`)
+				if (!modulePath) {
+					oneOrMoreStatementsAreUnableToConvert = true
+					break
 				}
+
+				// Check if it should write `import * as...` instead of `import default`
+				if (moduleName.startsWith('{') === false && document.isUntitled === false && vscode.workspace.getWorkspaceFolder(document.uri)) {
+					if (modulePath.startsWith('.')) {
+						const fullPath = getFilePath([fp.dirname(document.fileName), modulePath], _.trimStart(fp.extname(document.fileName), '.'))
+						if (fullPath === undefined) {
+							continue
+						}
+
+						const identifiers = getExportedIdentifiers(fullPath)
+						if (identifiers.has('*default') === false) {
+							moduleName = '* as ' + moduleName
+						}
+
+					} else if (await this.checkIfImportDefaultIsPreferredOverNamespace() === false) {
+						moduleName = '* as ' + moduleName
+					}
+				}
+
+				importList.push(`import ${moduleName} from '${modulePath}'`)
 			}
 
-			if (importList.length > 0) {
-				const statementEnding = (this.options.semiColons === 'always' || this.options.semiColons === 'auto' && await hasSemiColon(codeTree)) ? ';' : ''
-
-				const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
-
-				const importText = importList.join(statementEnding + lineEnding)
-				await editor.edit(worker => worker.replace(
-					new vscode.Range(document.positionAt(statement.getStart()), document.positionAt(statement.getEnd())),
-					importText
-				))
+			if (importList.length === 0 || oneOrMoreStatementsAreUnableToConvert) {
+				continue
 			}
+
+			const statementEnding = (this.options.semiColons === 'always' || this.options.semiColons === 'auto' && await hasSemiColon(codeTree)) ? ';' : ''
+
+			const lineEnding = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'
+
+			const importText = importList.join(statementEnding + lineEnding)
+			await editor.edit(worker => worker.replace(
+				new vscode.Range(document.positionAt(statement.getStart()), document.positionAt(statement.getEnd())),
+				importText
+			))
 		}
 	}
 }
@@ -1363,8 +1391,7 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 				ts.isExpressionStatement(node) &&
 				ts.isBinaryExpression(node.expression) && node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
 				ts.isPropertyAccessExpression(node.expression.left) &&
-				ts.isIdentifier(node.expression.left.expression) && node.expression.left.expression.text === 'module' && node.expression.left.name.text === 'exports' &&
-				ts.isObjectLiteralExpression(node.expression.right)
+				ts.isIdentifier(node.expression.left.expression) && node.expression.left.expression.text === 'module' && node.expression.left.name.text === 'exports'
 			) {
 				// module.exports = { ... }
 				if (ts.isIdentifier(node.expression.right) && importedNames.has(node.expression.right.text)) {
@@ -1408,23 +1435,26 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 }
 
 function getFilePath(pathList: Array<string>, preferredExtension: string): string {
-	const filePath = fp.resolve(...pathList)
+	const fullPath = fp.resolve(...pathList)
 
-	if (fs.existsSync(filePath)) {
-		const fileStat = fs.lstatSync(filePath)
+	if (fs.existsSync(fullPath)) {
+		const fileStat = fs.lstatSync(fullPath)
 		if (fileStat.isFile()) {
-			return filePath
+			return fullPath
 
 		} else if (fileStat.isDirectory()) {
-			return getFilePath([...pathList, 'index'], preferredExtension)
+			const indexPath = getFilePath([...pathList, 'index'], preferredExtension)
+			if (indexPath !== undefined) {
+				return indexPath
+			}
 		}
 	}
 
 	const possibleExtensions = _.uniq([preferredExtension.toLowerCase(), 'tsx', 'ts', 'jsx', 'js'])
 	for (const extension of possibleExtensions) {
-		const fullPath = filePath + '.' + extension
-		if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isFile()) {
-			return fullPath
+		const fullPathWithExtension = fullPath + '.' + extension
+		if (fs.existsSync(fullPathWithExtension) && fs.lstatSync(fullPathWithExtension).isFile()) {
+			return fullPathWithExtension
 		}
 	}
 }

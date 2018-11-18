@@ -1,3 +1,6 @@
+### 2.5.0
+- Added `codeQuicken.convertImport` command for JavaScript and TypeScript.
+
 ### 2.4.2
 - Added ability to place a named import in alphabetically order.
 - Added ability to place a named import with a new line according to its surrounding.
