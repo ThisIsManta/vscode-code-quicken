@@ -1334,9 +1334,15 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 								exportedNames.set(name, { text, pathList: [filePath, ...pathList] })
 
 							} else if (importedNames.has(name)) {
+								// import named from "path"
 								// export { named }
 								const { text, pathList } = importedNames.get(name)
 								exportedNames.set(name, { text, pathList: [filePath, ...pathList] })
+
+							} else {
+								// const named = ...
+								// export { named }
+								exportedNames.set(name, { text: '', pathList: [filePath] })
 							}
 						}
 					})

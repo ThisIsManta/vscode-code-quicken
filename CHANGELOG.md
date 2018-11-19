@@ -1,3 +1,6 @@
+### 2.5.1
+- Fixed missing `export { named }` where `named` is not imported from another file.
+
 ### 2.5.0
 - Added `codeQuicken.convertImport` command for JavaScript and TypeScript.
 
