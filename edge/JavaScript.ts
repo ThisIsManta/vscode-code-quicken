@@ -1256,6 +1256,10 @@ async function getImportOrRequireSnippet(identifier: string, importClause: strin
 
 interface IdentifierMap extends Map<string, { text: string, pathList: Array<string> }> { }
 
+function δ(name: string) {
+	return name === 'default' ? '*default' : name
+}
+
 function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<string, IdentifierMap>(), processingFilePaths = new Set<string>()) {
 	if (cachedFilePaths.has(filePath)) {
 		return cachedFilePaths.get(filePath)
@@ -1326,9 +1330,9 @@ function getExportedIdentifiers(filePath: string, cachedFilePaths = new Map<stri
 						const name = stub.name.text
 						if (path) {
 							const transitIdentifiers = getExportedIdentifiers(path, cachedFilePaths, processingFilePaths)
-							if (stub.propertyName && transitIdentifiers.has(stub.propertyName.text)) {
+							if (stub.propertyName && transitIdentifiers.has(δ(stub.propertyName.text))) {
 								// export { named as exported } from "path"
-								const { text, pathList } = transitIdentifiers.get(stub.propertyName.text)
+								const { text, pathList } = transitIdentifiers.get(δ(stub.propertyName.text))
 								exportedNames.set(name, { text, pathList: [filePath, path, ...pathList] })
 
 							} else if (transitIdentifiers.has(name)) {

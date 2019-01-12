@@ -4,6 +4,7 @@
 - Amended `codeQuicken.javascript.filteredFileList` setting so it filters against all matching rule, and supports `${TM_FILENAME_BASE}` interpolation.
 - Amended `codeQuicken.history` setting so it has the default of 3.
 - Fixed not auto applying when changing `codeQuicken.history` setting.
+- Fixed could not recognized `export { default as named } from '...'` in an index file.
 
 ### 2.5.1
 - Fixed missing `export { named }` where `named` is not imported from another file.
