@@ -79,20 +79,17 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             const recentItems = localStorage.recentSelectedItems.get(language, totalItems)
-            const frontItems = recentItems.length > 0 ? recentItems : totalItems.slice(0, 100)
+            const topItems = totalItems.slice(0, 100) // Show the first 100 items for performance reasons
 
             hideProgress()
 
             const picker = vscode.window.createQuickPick<Item>()
             picker.placeholder = 'Type a file path or node module name'
-            picker.items = frontItems
+            picker.items = [...recentItems, ...topItems]
             picker.matchOnDescription = true
             picker.onDidChangeValue(() => {
                 if (picker.value.trim().length > 0 && picker.items !== totalItems) {
                     picker.items = totalItems
-
-                } else if (picker.value.trim().length === 0 && picker.items !== frontItems) {
-                    picker.items = frontItems
                 }
             })
             picker.onDidAccept(async () => {

@@ -60,7 +60,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 20,
-                    "default": 20
+                    "default": 3
                 },
                 "codeQuicken.javascript.syntax": {
                     "description": "Insert either ES2015's import or AMD's require syntax. Setting this to \"auto\" will resolve using the current viewing file or nearby files automatically.",
@@ -244,7 +244,8 @@
         "keybindings": [
             {
                 "command": "codeQuicken.addImport",
-                "key": "ctrl+shift+i"
+                "key": "ctrl+shift+i",
+                "when": "editorTextFocus && !editorReadonly"
             }
         ]
     },
