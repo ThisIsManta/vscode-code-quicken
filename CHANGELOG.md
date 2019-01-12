@@ -1,4 +1,5 @@
 ### 2.6.0
+- Amended `codeQuicken.javascript.filteredFileList` setting so it filters against all matching rule, and supports `${TM_FILENAME_BASE}` interpolation.
 - Amended the import/require list so it shows the recently used items and the first 100 items when no search words.
 - Amended `codeQuicken.history` setting so it has the default of 3.
 

@@ -130,7 +130,7 @@
                     "default": "none"
                 },
                 "codeQuicken.javascript.filteredFileList": {
-                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.js\", and you want to see only the files ended with \".spec.js\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.js$\": \"\\\\.spec\\\\.js$\" }`",
+                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.js\", and you want to see only the files ending with \".spec.js\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.js$\": \"\\\\.spec\\\\.js$\" }`. Note that the path separators will always be POSIX slash characters. The term `${TM_FILENAME_BASE}` in your right-side regular expression will be replaced with the active file name without its extension.",
                     "type": "object",
                     "patternProperties": {
                         ".": {

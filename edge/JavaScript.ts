@@ -17,7 +17,7 @@ export interface LanguageOptions {
 	semiColons: 'always' | 'never' | 'auto'
 	predefinedVariableNames: object
 	variableNamingConvention: 'camelCase' | 'PascalCase' | 'snake_case' | 'lowercase' | 'none'
-	filteredFileList: object
+	filteredFileList: { [currentFilePattern: string]: string }
 }
 
 const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
@@ -51,6 +51,7 @@ export default class JavaScript implements Language {
 
 		const documentFileInfo = new FileInfo(document.fileName)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
+		const workPath = _.trimStart(document.fileName.substring(rootPath.length).replace(/\\/g, fp.posix.sep), fp.posix.sep)
 
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
@@ -60,13 +61,20 @@ export default class JavaScript implements Language {
 				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this))
 		}
 
-		const fileFilterRule = _.toPairs(this.options.filteredFileList)
-			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
-			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
+		const TM_FILENAME_BASE = _.escapeRegExp(documentFileInfo.fileNameWithoutExtension.replace(/\..+/, ''))
+		const fileFilterRules = _.chain(this.options.filteredFileList)
+			.toPairs()
+			.map(([key, value]) => [
+				new RegExp(key),
+				new RegExp(value.replace('${TM_FILENAME_BASE}', TM_FILENAME_BASE))
+			])
+			.filter(([currentFilePattern]) => currentFilePattern.test(workPath))
+			.map(([, matchingFilePattern]) => matchingFilePattern)
+			.value()
 
 		const filteredItems: Array<FileItem> = [];
 		for (const item of this.fileItemCache) {
-			if (fileFilterRule && fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) === false) {
+			if (fileFilterRules.length > 0 && fileFilterRules.every(pattern => pattern.test(item.workPath)) === false) {
 				continue
 			}
 
@@ -265,7 +273,7 @@ export default class JavaScript implements Language {
 
 	reset() {
 		this.fileItemCache = null
-		this.nodeItemCache = null
+		this.nodeItemCache.clear()
 	}
 
 	protected async createFileFilter() {
@@ -308,7 +316,7 @@ export default class JavaScript implements Language {
 			if (!ts.isVariableStatement(statement)) {
 				continue
 			}
-			
+
 			const importList: Array<string> = []
 			let oneOrMoreStatementsAreUnableToConvert = false
 
@@ -410,10 +418,12 @@ export class FileItem implements Item {
 	readonly label: string
 	readonly description: string
 	readonly fileInfo: FileInfo
+	readonly workPath: string
 	sortablePath: string
 	sortableName: string
 
 	constructor(filePath: string, rootPath: string, language: JavaScript) {
+		this.workPath = _.trimStart(filePath.substring(rootPath.length).replace(/\\/g, fp.posix.sep), fp.posix.sep)
 		this.fileInfo = new FileInfo(filePath)
 		this.id = this.fileInfo.fullPath
 		this.language = language
