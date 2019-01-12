@@ -64,7 +64,7 @@ export default class JavaScript implements Language {
 			.map((pair: Array<string>) => ({ documentPathPattern: new RegExp(pair[0]), filePathPattern: new RegExp(pair[1]) }))
 			.find(rule => rule.documentPathPattern.test(documentFileInfo.fullPathForPOSIX))
 
-		const filteredItems: Array<Item> = []
+		const filteredItems: Array<FileItem> = [];
 		for (const item of this.fileItemCache) {
 			if (fileFilterRule && fileFilterRule.filePathPattern.test(item.fileInfo.fullPathForPOSIX) === false) {
 				continue
