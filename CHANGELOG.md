@@ -1,7 +1,9 @@
 ### 2.6.0
+- Amended the import/require list sorting logic.
+- Amended the import/require list so it shows the recently used items followed by the first 100 items when no search words.
 - Amended `codeQuicken.javascript.filteredFileList` setting so it filters against all matching rule, and supports `${TM_FILENAME_BASE}` interpolation.
-- Amended the import/require list so it shows the recently used items and the first 100 items when no search words.
 - Amended `codeQuicken.history` setting so it has the default of 3.
+- Fixed not auto applying when changing `codeQuicken.history` setting.
 
 ### 2.5.1
 - Fixed missing `export { named }` where `named` is not imported from another file.

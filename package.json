@@ -56,7 +56,7 @@
             "title": "Code Quicken",
             "properties": {
                 "codeQuicken.history": {
-                    "description": "Set the maximum number of the recently used items when no search words.",
+                    "description": "Set the maximum number of the recently used items at the top of the import/require list when no search words. Setting this to 0 will hide the recently used items.",
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 20,
@@ -197,7 +197,7 @@
                     "default": "none"
                 },
                 "codeQuicken.typescript.filteredFileList": {
-                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.ts\", and you want to see only the files ended with \".spec.ts\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.ts$\": \"\\\\.spec\\\\.ts$\" }`",
+                    "description": "Filter the files shown in the list when adding an import/require statement. Both keys and values must be written in regular expression. For example, you are working on a file named \"foo.ts\", and you want to see only the files ending with \".spec.ts\" in the list when adding an import statement, then you must set this to `{ \"/foo\\\\.ts$\": \"\\\\.spec\\\\.ts$\" }`. Note that the path separators will always be POSIX slash characters. The term `${TM_FILENAME_BASE}` in your right-side regular expression will be replaced with the active file name without its extension.",
                     "type": "object",
                     "patternProperties": {
                         ".": {

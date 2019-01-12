@@ -36,13 +36,17 @@ export default class RecentSelectedItems {
 		}
 		list.unshift(selectedItem.id)
 		if (list.length > this.limit) {
-			list.pop()
+			list.splice(0, list.length - this.limit)
 		}
 	}
 
 	fromJSON(json: any) {
 		for (const languageName in json) {
-			this.data.set(languageName, json[languageName] || [])
+			const list = json[languageName] || []
+			if (list.length > this.limit) {
+				list.splice(0, list.length - this.limit)
+			}
+			this.data.set(languageName, list)
 		}
 	}
 

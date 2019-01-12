@@ -28,28 +28,28 @@ export interface Item extends vscode.QuickPickItem {
 
 export function getSortablePath(fileInfo: FileInfo, documentFileInfo: FileInfo) {
 	// Set sorting rank according to the directory path
-	// a = the opening files in VS Code
-	// b = the files that are located in the same directory of the working document
-	// cez = "./dir/file"
-	// fd = "../file"
-	// fez = "../dir/file"
+	// a   = no longer used
+	// bXY = same directory of the active document, where X is the number of the same starting word, and Y is the number of the same appearance word
+	// cez = "./subdir/file"
+	// fd  = "../file"
+	// fez = "../subdir/file"
 	// ffd = "../../file"
-	if (vscode.workspace.textDocuments.find(document => document.fileName === fileInfo.fullPath) !== undefined) {
-		return 'a'
-
-	} else if (fileInfo.directoryPath === documentFileInfo.directoryPath) {
-		// Set file name similarity level
-		// Make similar file name appear on the top of its directory
-		const wordsOfDocumentName = _.words(documentFileInfo.fileNameWithExtension)
-		const wordsOfThisFileName = _.words(fileInfo.fileNameWithExtension)
-		let index = -1
-		let bound = wordsOfDocumentName.length
-		while (++index < bound) {
-			if (wordsOfDocumentName[index] !== wordsOfThisFileName[index]) {
+	if (fileInfo.directoryPath === documentFileInfo.directoryPath) {
+		// Calculate file similarity level
+		// Note that this makes similar file name appear on the top among the files in the same directory
+		const currentActiveFileName = _.words(documentFileInfo.fileNameWithoutExtension)
+		const givenComparableFileName = _.words(fileInfo.fileNameWithoutExtension)
+		let totalWordCount = currentActiveFileName.length
+		let longestStartWordIndex = -1
+		while (++longestStartWordIndex < totalWordCount) {
+			if (currentActiveFileName[longestStartWordIndex] !== givenComparableFileName[longestStartWordIndex]) {
 				break
 			}
 		}
-		return 'b' + _.padStart((bound - index).toString(), bound.toString().length, '0')
+		const startWordCount = longestStartWordIndex
+		const appearanceWordCount = _.intersection(currentActiveFileName, givenComparableFileName).length
+		const getSortableCount = (count: number) => _.padStart((totalWordCount - count).toString(), totalWordCount.toString().length, '0')
+		return 'b' + getSortableCount(startWordCount) + getSortableCount(appearanceWordCount)
 
 	} else {
 		return fileInfo.getRelativePath(documentFileInfo.directoryPath).split('/').map((chunk, index, array) => {
