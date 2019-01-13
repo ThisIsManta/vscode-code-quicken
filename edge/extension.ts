@@ -1,3 +1,4 @@
+import * as _ from 'lodash'
 import * as vscode from 'vscode'
 
 import { Configurations, Language, Item } from './global'
@@ -67,8 +68,8 @@ export function activate(context: vscode.ExtensionContext) {
         }, 150)
 
         for (let language of languages) {
-            const totalItems = await language.getItems(document)
-            if (!totalItems) {
+            const items = await language.getItems(document)
+            if (!items) {
                 continue
             }
 
@@ -78,18 +79,23 @@ export function activate(context: vscode.ExtensionContext) {
                 return null
             }
 
+            const { shortItems, totalItems } = items
             const recentItems = localStorage.recentSelectedItems.get(language, totalItems)
-            const topItems = totalItems.slice(0, 100) // Show the first 100 items for performance reasons
+            const quickItems = _.unionBy(recentItems, shortItems, item => item.id)
 
             hideProgress()
 
             const picker = vscode.window.createQuickPick<Item>()
             picker.placeholder = 'Type a file path or node module name'
-            picker.items = [...recentItems, ...topItems]
+            picker.items = quickItems
             picker.matchOnDescription = true
             picker.onDidChangeValue(() => {
-                if (picker.value.trim().length > 0 && picker.items !== totalItems) {
+                if (picker.value.length > 0 && picker.items !== totalItems) {
                     picker.items = totalItems
+                }
+
+                if (picker.value.length === 0 && picker.items !== quickItems) {
+                    picker.items = quickItems
                 }
             })
             picker.onDidAccept(async () => {

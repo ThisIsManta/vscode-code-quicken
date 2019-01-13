@@ -13,7 +13,7 @@ export interface Configurations {
 }
 
 export interface Language {
-	getItems(document: vscode.TextDocument): Promise<Array<Item> | null>
+	getItems(document: vscode.TextDocument): Promise<{ shortItems: Array<Item>; totalItems: Array<Item> } | null>
 	addItem?(filePath: string): void
 	cutItem?(filePath: string): void
 	fixImport?(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken): Promise<boolean | null>
@@ -26,40 +26,33 @@ export interface Item extends vscode.QuickPickItem {
 	addImport(editor: vscode.TextEditor): Promise<null | undefined>
 }
 
-export function getSortablePath(fileInfo: FileInfo, documentFileInfo: FileInfo) {
-	// Set sorting rank according to the directory path
-	// a   = no longer used
-	// bXY = same directory of the active document, where X is the number of the same starting word, and Y is the number of the same appearance word
-	// cez = "./subdir/file"
-	// fd  = "../file"
-	// fez = "../subdir/file"
-	// ffd = "../../file"
-	if (fileInfo.directoryPath === documentFileInfo.directoryPath) {
-		// Calculate file similarity level
-		// Note that this makes similar file name appear on the top among the files in the same directory
-		const currentActiveFileName = _.words(documentFileInfo.fileNameWithoutExtension)
-		const givenComparableFileName = _.words(fileInfo.fileNameWithoutExtension)
-		let totalWordCount = currentActiveFileName.length
-		let longestStartWordIndex = -1
-		while (++longestStartWordIndex < totalWordCount) {
-			if (currentActiveFileName[longestStartWordIndex] !== givenComparableFileName[longestStartWordIndex]) {
-				break
-			}
-		}
-		const startWordCount = longestStartWordIndex
-		const appearanceWordCount = _.intersection(currentActiveFileName, givenComparableFileName).length
-		const getSortableCount = (count: number) => _.padStart((totalWordCount - count).toString(), totalWordCount.toString().length, '0')
-		return 'b' + getSortableCount(startWordCount) + getSortableCount(appearanceWordCount)
+export function getSortingLogic<T extends { fileInfo: FileInfo }>(rootPath: string) {
+	return [
+		(item: T) => item.fileInfo.directoryPath === rootPath
+			? '!'
+			: item.fileInfo.directoryPath.substring(rootPath.length).toLowerCase(),
+		(item: T) => item.fileInfo.fileNameWithoutExtension === 'index' ? 1 : 0,
+		(item: T) => /^\W*[a-z]/.test(item.fileInfo.fileNameWithExtension)
+			? item.fileInfo.fileNameWithExtension.toUpperCase()
+			: item.fileInfo.fileNameWithExtension.toLowerCase()
+	]
+}
 
-	} else {
-		return fileInfo.getRelativePath(documentFileInfo.directoryPath).split('/').map((chunk, index, array) => {
-			if (chunk === '.') return 'c'
-			else if (chunk === '..') return 'f'
-			else if (index === array.length - 1 && index > 0 && array[index - 1] === '..') return 'd'
-			else if (index === array.length - 1) return 'z'
-			return 'e'
-		}).join('')
-	}
+export function getShortList<T extends { fileInfo: FileInfo }>(items: Array<T>, documentFileInfo: FileInfo) {
+	const documentFileWords = _.words(documentFileInfo.fileNameWithoutExtension)
+
+	const itemsFromCurrentDirectory = _.chain(items)
+		.filter(item => item.fileInfo.directoryPath === documentFileInfo.directoryPath)
+		.sortBy(item => {
+			const fileWords = _.words(item.fileInfo.fileNameWithoutExtension)
+			return documentFileWords.length - _.intersection(documentFileWords, fileWords).length
+		})
+		.value()
+
+	const itemsFromSubDirectories = items
+		.filter(item => item.fileInfo.directoryPath.startsWith(documentFileInfo.directoryPath + fp.sep))
+
+	return itemsFromCurrentDirectory.concat(itemsFromSubDirectories)
 }
 
 export async function findFilesRoughly(filePath: string, fileExtension?: string) {

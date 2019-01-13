@@ -5,7 +5,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as ts from 'typescript'
 
-import { Configurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
+import { Configurations, Language, Item, getShortList, getSortingLogic, findFilesRoughly } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -56,9 +56,11 @@ export default class JavaScript implements Language {
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.*')
 
-			this.fileItemCache = fileLinks
+			this.fileItemCache = _.chain(fileLinks)
 				.filter(await this.createFileFilter())
 				.map(fileLink => new FileItem(fileLink.fsPath, rootPath, this))
+				.sortBy(getSortingLogic(rootPath))
+				.value()
 		}
 
 		const TM_FILENAME_BASE = _.escapeRegExp(documentFileInfo.fileNameWithoutExtension.replace(/\..+/, ''))
@@ -72,26 +74,17 @@ export default class JavaScript implements Language {
 			.map(([, matchingFilePattern]) => matchingFilePattern)
 			.value()
 
-		const filteredItems: Array<FileItem> = [];
-		for (const item of this.fileItemCache) {
-			if (fileFilterRules.length > 0 && fileFilterRules.every(pattern => pattern.test(item.workPath)) === false) {
-				continue
+		const filteredFileItems = this.fileItemCache.filter(fileItem => {
+			if (fileFilterRules.length > 0 && fileFilterRules.every(pattern => pattern.test(fileItem.workPath)) === false) {
+				return false
 			}
 
-			if (item.fileInfo.fullPath === documentFileInfo.fullPath) {
-				continue
+			if (fileItem.fileInfo.fullPath === documentFileInfo.fullPath) {
+				return false
 			}
 
-			item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo)
-
-			filteredItems.push(item)
-		}
-
-		// Sort files by their path and name
-		const sortedFileItems = _.sortBy(filteredItems, [
-			item => item.sortablePath,
-			item => item.sortableName,
-		])
+			return true
+		})
 
 		const possibleModulePathList = await getPossibleModulePathList(document)
 		const [packageJsonPath] = possibleModulePathList.map(path => fp.join(path, 'package.json'))
@@ -119,10 +112,13 @@ export default class JavaScript implements Language {
 			)
 		}
 
-		return [
-			...sortedFileItems,
-			...(this.nodeItemCache.get(packageJsonPath) || [])
-		] as Array<Item>
+		return {
+			shortItems: getShortList(filteredFileItems, documentFileInfo),
+			totalItems: [
+				...filteredFileItems,
+				...(this.nodeItemCache.get(packageJsonPath) || [])
+			]
+		}
 	}
 
 	addItem(filePath: string) {
@@ -419,8 +415,6 @@ export class FileItem implements Item {
 	readonly description: string
 	readonly fileInfo: FileInfo
 	readonly workPath: string
-	sortablePath: string
-	sortableName: string
 
 	constructor(filePath: string, rootPath: string, language: JavaScript) {
 		this.workPath = _.trimStart(filePath.substring(rootPath.length).replace(/\\/g, fp.posix.sep), fp.posix.sep)
@@ -436,14 +430,6 @@ export class FileItem implements Item {
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else if (this.language.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
 			this.label = this.fileInfo.fileNameWithoutExtension
-		}
-
-		// Set sorting rank according to the file name
-		if (checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
-			// Make index file appear on the top of its directory
-			this.sortableName = '!'
-		} else {
-			this.sortableName = this.fileInfo.fileNameWithExtension.toLowerCase()
 		}
 	}
 

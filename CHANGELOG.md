@@ -1,6 +1,6 @@
 ### 2.6.0
-- Amended the import/require list sorting logic.
-- Amended the import/require list so it shows the recently used items followed by the first 100 items when no search words.
+- Amended the import/require list so it shows the recently used items followed by the files in current working directory and sub-directories.
+- Amended the import/require list so it sorts similar file names first.
 - Amended `codeQuicken.javascript.filteredFileList` setting so it filters against all matching rule, and supports `${TM_FILENAME_BASE}` interpolation.
 - Amended `codeQuicken.history` setting so it has the default of 3.
 - Fixed not auto applying when changing `codeQuicken.history` setting.

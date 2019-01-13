@@ -4,7 +4,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import { Parser, nodes as Nodes } from 'stylus'
 
-import { Configurations, Language, Item, getSortablePath, findFilesRoughly } from './global';
+import { Configurations, Language, Item, getShortList, getSortingLogic, findFilesRoughly } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -36,18 +36,18 @@ export default class Stylus implements Language {
 		if (!this.fileItemCache) {
 			const fileLinks = await vscode.workspace.findFiles('**/*.{styl,css,jpg,jpeg,png,gif,svg,otf,ttf,woff,woff2,eot}')
 
-			this.fileItemCache = fileLinks
+			this.fileItemCache = _.chain(fileLinks)
 				.map(fileLink => new FileItem(new FileInfo(fileLink.fsPath), rootPath, this.options))
+				.sortBy(getSortingLogic(rootPath))
+				.value()
 		}
 
-		return _.chain(this.fileItemCache)
-			.reject(item => item.fileInfo.fullPath === documentFileInfo.fullPath) // Remove the current file
-			.forEach(item => item.sortablePath = getSortablePath(item.fileInfo, documentFileInfo))
-			.sortBy([ // Sort files by their path and name
-				item => item.sortablePath,
-				item => item.sortableName,
-			])
-			.value() as Array<Item>
+		const filteredFileItems = _.reject(this.fileItemCache, item => item.fileInfo.fullPath === documentFileInfo.fullPath)
+
+		return {
+			shortItems: getShortList(filteredFileItems, documentFileInfo),
+			totalItems: filteredFileItems,
+		}
 	}
 
 	addItem(filePath: string) {
@@ -180,8 +180,6 @@ class FileItem implements Item {
 	readonly label: string;
 	readonly description: string;
 	readonly fileInfo: FileInfo
-	sortableName: string
-	sortablePath: string
 
 	constructor(fileInfo: FileInfo, rootPath: string, options: LanguageOptions) {
 		this.id = fileInfo.fullPathForPOSIX
@@ -197,12 +195,6 @@ class FileItem implements Item {
 			this.label = this.fileInfo.fileNameWithoutExtension
 		} else {
 			this.label = this.fileInfo.fileNameWithExtension
-		}
-
-		if (this.fileInfo.fileNameWithExtension === 'index.styl') {
-			this.sortableName = '!'
-		} else {
-			this.sortableName = this.fileInfo.fileNameWithExtension.toLowerCase()
 		}
 	}
 
