@@ -198,10 +198,18 @@ export default class JavaScript implements Language {
 						path.includes('"') === false
 					)
 				})
-				.map((node: ts.ImportDeclaration) => new ImportStatementForFixingImport((node.moduleSpecifier as ts.StringLiteral).text, node.getStart(), node.getEnd())),
+				.map((node: ts.ImportDeclaration) => new ImportStatementForFixingImport(
+					(node.moduleSpecifier as ts.StringLiteral).text,
+					node.moduleSpecifier.getStart(),
+					node.moduleSpecifier.getEnd()
+				)),
 			findNodesRecursively<ts.CallExpression>(codeTree, node => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0]))
 				.filter(node => (node.arguments[0] as ts.StringLiteral).text.startsWith('.'))
-				.map(node => new ImportStatementForFixingImport((node.arguments[0] as ts.StringLiteral).text, node.getStart(), node.getEnd())),
+				.map(node => new ImportStatementForFixingImport(
+					(node.arguments[0] as ts.StringLiteral).text,
+					node.arguments[0].getStart(),
+					node.arguments[0].getEnd()
+				)),
 		]).filter(item => item.originalRelativePath)
 
 		const brokenImports = totalImports.filter(item =>
