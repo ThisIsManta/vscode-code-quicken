@@ -55,13 +55,20 @@ export function getShortList<T extends { fileInfo: FileInfo }>(items: Array<T>, 
 	return itemsFromCurrentDirectory.concat(itemsFromSubDirectories)
 }
 
-export async function findFilesRoughly(filePath: string, fileExtension?: string) {
+export async function findFilesRoughly(filePath: string, fileExtensions?: Array<string>) {
 	const fileName = fp.basename(filePath)
 
 	let fileLinks = await vscode.workspace.findFiles('**/' + fileName)
-	if (fileExtension && fileName.endsWith('.' + fileExtension) === false) {
-		fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '.' + fileExtension))
-		fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.' + fileExtension))
+
+	if (fileExtensions) {
+		for (const fileExtension of fileExtensions) {
+			if (fileName.toLowerCase().endsWith('.' + fileExtension)) {
+				continue
+			}
+
+			fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '.' + fileExtension))
+			fileLinks = fileLinks.concat(await vscode.workspace.findFiles('**/' + fileName + '/index.' + fileExtension))
+		}
 	}
 
 	const matchingPaths = fileLinks.map(item => item.fsPath)
@@ -81,4 +88,8 @@ export async function findFilesRoughly(filePath: string, fileExtension?: string)
 	}
 
 	return matchingPaths
+}
+
+export function hasFileExtensionOf(document: vscode.TextDocument, extensions: Array<string>) {
+	return extensions.indexOf(_.trimStart(fp.extname(document.fileName), '.').toLowerCase()) >= 0
 }

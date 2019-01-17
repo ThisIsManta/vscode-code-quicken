@@ -36,8 +36,8 @@ export function activate(context: vscode.ExtensionContext) {
 
         languages = [
             // Add new supported languages here
-            new JavaScript(config, fileWatch),
             new TypeScript(config, fileWatch),
+            new JavaScript(config, fileWatch),
             new Stylus(config),
         ]
     }

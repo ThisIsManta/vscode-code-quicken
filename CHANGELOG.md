@@ -1,5 +1,6 @@
 ### 2.6.1
 - Fixed wrong editing range for `codeQuicken.fixImport` command.
+- Fixed could not find TypeScript files on a JavaScript file when running `codeQuicken.fixImport` command.
 
 ### 2.6.0
 - Amended the import/require list so it shows the recently used items followed by the files in current working directory and sub-directories.

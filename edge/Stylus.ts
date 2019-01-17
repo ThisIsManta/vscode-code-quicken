@@ -120,7 +120,7 @@ export default class Stylus implements Language {
 				return null
 			}
 
-			const matchingFullPaths = await findFilesRoughly(node.val, 'styl')
+			const matchingFullPaths = await findFilesRoughly(node.val, ['styl'])
 
 			if (matchingFullPaths.length === 0) {
 				unsolvableImports.push(node)

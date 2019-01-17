@@ -5,7 +5,7 @@ import * as _ from 'lodash'
 import * as vscode from 'vscode'
 import * as ts from 'typescript'
 
-import { Configurations, Language, Item, getShortList, getSortingLogic, findFilesRoughly } from './global';
+import { Configurations, Language, Item, getShortList, getSortingLogic, findFilesRoughly, hasFileExtensionOf } from './global';
 import FileInfo from './FileInfo'
 
 export interface LanguageOptions {
@@ -26,8 +26,6 @@ export default class JavaScript implements Language {
 	private fileItemCache: Array<FileItem>
 	private nodeItemCache = new Map<string, Array<NodeItem>>()
 
-	protected acceptedLanguage = /^javascript(react)?$/
-
 	public options: LanguageOptions
 
 	constructor(config: Configurations, fileWatch: vscode.FileSystemWatcher) {
@@ -40,12 +38,16 @@ export default class JavaScript implements Language {
 		})
 	}
 
+	async getCompatibleFileExtensions() {
+		return ['js', 'jsx']
+	}
+
 	async checkIfImportDefaultIsPreferredOverNamespace() {
 		return true
 	}
 
 	async getItems(document: vscode.TextDocument) {
-		if (this.acceptedLanguage.test(document.languageId) === false) {
+		if (hasFileExtensionOf(document, await this.getCompatibleFileExtensions()) === false) {
 			return null
 		}
 
@@ -139,12 +141,16 @@ export default class JavaScript implements Language {
 	}
 
 	async fixImport(editor: vscode.TextEditor, document: vscode.TextDocument, cancellationToken: vscode.CancellationToken) {
-		if (this.acceptedLanguage.test(document.languageId) === false) {
+		if (hasFileExtensionOf(document, await this.getCompatibleFileExtensions()) === false) {
 			return false
 		}
 
 		const documentFileInfo = new FileInfo(document.fileName)
 		const rootPath = vscode.workspace.getWorkspaceFolder(document.uri).uri.fsPath
+		const compatibleFileExtensions = _.sortBy(
+			await this.getCompatibleFileExtensions(),
+			fileExtension => fileExtension.startsWith(documentFileInfo.fileExtensionWithoutLeadingDot) ? 0 : 1
+		)
 
 		class ImportStatementForFixingImport {
 			originalRelativePath: string
@@ -167,7 +173,7 @@ export default class JavaScript implements Language {
 
 			async search() {
 				if (this.matchingFullPaths === undefined) {
-					this.matchingFullPaths = await findFilesRoughly(this.originalRelativePath, documentFileInfo.fileExtensionWithoutLeadingDot)
+					this.matchingFullPaths = await findFilesRoughly(this.originalRelativePath, compatibleFileExtensions)
 				}
 				return this.matchingFullPaths
 			}
@@ -306,7 +312,7 @@ export default class JavaScript implements Language {
 	async convertImport(editor: vscode.TextEditor) {
 		const document = editor.document
 
-		if (this.acceptedLanguage.test(document.languageId) === false) {
+		if (hasFileExtensionOf(document, await this.getCompatibleFileExtensions()) === false) {
 			return null
 		}
 

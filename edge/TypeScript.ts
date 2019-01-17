@@ -21,8 +21,14 @@ export default class TypeScript extends JavaScript {
 				syntax: 'import',
 			}
 		}, fileWatch)
+	}
 
-		this.acceptedLanguage = /^typescript(react)?/
+	async getCompatibleFileExtensions() {
+		if (await this.checkIfAllowJs()) {
+			return ['ts', 'tsx', 'js', 'jsx']
+		}
+
+		return ['ts', 'tsx']
 	}
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
@@ -30,10 +36,15 @@ export default class TypeScript extends JavaScript {
 		return _.get<boolean>(tsConfig, 'compilerOptions.esModuleInterop', false)
 	}
 
-	protected async createFileFilter() {
+	async checkIfAllowJs() {
 		const tsConfig = await this.getTypeScriptConfigurations()
-		if (_.get<boolean>(tsConfig, 'compilerOptions.allowJs', false)) {
+		return _.get<boolean>(tsConfig, 'compilerOptions.allowJs', false)
+	}
+
+	protected async createFileFilter() {
+		if (await this.checkIfAllowJs()) {
 			return () => true
+
 		} else {
 			// Reject JS files
 			return (link: vscode.Uri) => !JAVASCRIPT_EXTENSION.test(link.fsPath)
