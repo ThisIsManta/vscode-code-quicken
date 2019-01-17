@@ -436,14 +436,12 @@ export class FileItem implements Item {
 		this.id = this.fileInfo.fullPath
 		this.language = language
 
-		this.label = this.fileInfo.fileNameWithExtension
-		this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
-
 		if (this.language.options.indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
-		} else if (this.language.options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			this.label = this.fileInfo.fileNameWithoutExtension
+		} else {
+			this.label = this.language.options.fileExtension ? this.fileInfo.fileNameWithExtension : this.fileInfo.fileNameWithoutExtension
+			this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 		}
 	}
 
