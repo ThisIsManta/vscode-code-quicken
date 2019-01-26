@@ -80,7 +80,7 @@
                 "codeQuicken.javascript.fileExtension": {
                     "description": "Insert JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
                 "codeQuicken.javascript.indexFile": {
                     "description": "Insert \"index\" file name and also its extension to the path.",
@@ -147,7 +147,7 @@
                 "codeQuicken.typescript.fileExtension": {
                     "description": "Insert JS/JSX/TS/TSX file extension to the path.",
                     "type": "boolean",
-                    "default": false
+                    "default": true
                 },
                 "codeQuicken.typescript.indexFile": {
                     "description": "Insert \"index\" file name and also its extension to the path.",
