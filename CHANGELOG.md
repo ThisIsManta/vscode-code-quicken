@@ -1,3 +1,6 @@
+### 2.6.2
+- Amended `codeQuicken.javascript.predefinedVariableNames` setting so it accepts a workspace file path as a regular expression.
+
 ### 2.6.1
 - Fixed wrong editing range for `codeQuicken.fixImport` command.
 - Fixed could not find TypeScript files on a JavaScript file when running `codeQuicken.fixImport` command.

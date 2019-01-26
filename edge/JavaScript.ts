@@ -446,14 +446,14 @@ export class FileItem implements Item {
 	}
 
 	getNameAndRelativePath(document: vscode.TextDocument) {
-		const workingDirectory = new FileInfo(document.fileName).directoryPath
+		const directoryPath = new FileInfo(document.fileName).directoryPath
 		const options = this.language.options
-		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, options)
-		let path = this.fileInfo.getRelativePath(workingDirectory)
+		let name = getVariableName(this.fileInfo.fileNameWithoutExtension, this.workPath, options)
+		let path = this.fileInfo.getRelativePath(directoryPath)
 
 		if (checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
 			// Set the identifier as the directory name
-			name = getVariableName(this.fileInfo.directoryName, options)
+			name = getVariableName(this.fileInfo.directoryName, this.workPath, options)
 		}
 
 		if (options.indexFile === false && checkIfIndexFile(this.fileInfo.fileNameWithExtension)) {
@@ -854,7 +854,7 @@ class NodeItem implements Item {
 		this.id = 'node://' + name
 		this.label = name
 		this.description = version ? 'v' + version : ''
-		this.name = getVariableName(name, language.options)
+		this.name = getVariableName(name, null, language.options)
 		this.path = name
 		this.language = language
 	}
@@ -1109,7 +1109,7 @@ async function insertNamedImportToExistingImports(name: string, existingImports:
 	await editor.edit(worker => worker.insert(position, separator + name))
 }
 
-function getVariableName(name: string, options: LanguageOptions) {
+function getVariableName(name: string, path: string, options: LanguageOptions) {
 	const rules = _.toPairs(options.predefinedVariableNames)
 		.map((pair: Array<string>) => ({
 			inputPattern: new RegExp(pair[0]),
@@ -1118,6 +1118,9 @@ function getVariableName(name: string, options: LanguageOptions) {
 	for (let rule of rules) {
 		if (rule.inputPattern.test(name)) {
 			return name.replace(rule.inputPattern, rule.output)
+		}
+		if (path && rule.inputPattern.test(path)) {
+			return path.replace(rule.inputPattern, rule.output)
 		}
 	}
 
