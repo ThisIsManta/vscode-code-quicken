@@ -20,7 +20,7 @@ export interface LanguageOptions {
 	filteredFileList: { [currentFilePattern: string]: string }
 }
 
-const SUPPORTED_EXTENSION = /^(j|t)sx?$/i
+const SUPPORTED_EXTENSION = /\.(j|t)sx?$/i
 
 export default class JavaScript implements Language {
 	private fileItemCache: Array<FileItem>
@@ -44,6 +44,10 @@ export default class JavaScript implements Language {
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
 		return true
+	}
+
+	checkIfFileExtensionShouldBeRemoved(fileExtensionWithLeadingDot: string, document: vscode.TextDocument) {
+		return this.options.fileExtension === false && SUPPORTED_EXTENSION.test(fileExtensionWithLeadingDot)
 	}
 
 	async getItems(document: vscode.TextDocument) {
@@ -440,7 +444,7 @@ export class FileItem implements Item {
 			this.label = this.fileInfo.directoryName
 			this.description = _.trim(this.fileInfo.fullPath.substring(rootPath.length), fp.sep)
 		} else {
-			this.label = this.language.options.fileExtension ? this.fileInfo.fileNameWithExtension : this.fileInfo.fileNameWithoutExtension
+			this.label = this.fileInfo.fileNameWithExtension
 			this.description = _.trim(fp.dirname(this.fileInfo.fullPath.substring(rootPath.length)), fp.sep)
 		}
 	}
@@ -460,9 +464,9 @@ export class FileItem implements Item {
 			// Remove "/index.js" from the path
 			path = fp.dirname(path)
 
-		} else if (options.fileExtension === false && SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
-			// Remove file extension from the path only if it matches the working document
-			path = path.replace(new RegExp('\\.' + _.escapeRegExp(this.fileInfo.fileExtensionWithoutLeadingDot) + '$'), '')
+		} else if (this.language.checkIfFileExtensionShouldBeRemoved(fp.extname(this.fileInfo.fileNameWithExtension), document)) {
+			// Remove file extension from the path
+			path = path.replace(new RegExp(_.escapeRegExp(fp.extname(this.fileInfo.fileNameWithExtension)) + '$'), '')
 		}
 
 		return { name, path }
@@ -476,7 +480,7 @@ export class FileItem implements Item {
 
 		const existingImports = getExistingImports(codeTree)
 
-		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileExtensionWithoutLeadingDot)) {
+		if (SUPPORTED_EXTENSION.test(this.fileInfo.fileNameWithExtension)) {
 			const pattern = await this.getImportPatternForJavaScript(existingImports, document)
 			if (!pattern) {
 				return null
@@ -684,11 +688,12 @@ export class FileItem implements Item {
 			}
 
 			let indexFileRelativePath = new FileInfo(indexFilePath).getRelativePath(workingDirectory)
+			const fileExtension = fp.extname(indexFileRelativePath)
 			if (options.indexFile === false) {
 				indexFileRelativePath = fp.dirname(indexFileRelativePath)
 
-			} else if (options.fileExtension === false) {
-				indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fp.extname(indexFileRelativePath)) + '$'), '')
+			} else if (this.language.checkIfFileExtensionShouldBeRemoved(fileExtension, document)) {
+				indexFileRelativePath = indexFileRelativePath.replace(new RegExp(_.escapeRegExp(fileExtension) + '$'), '')
 			}
 
 			const duplicateImportForIndexFile = getDuplicateImport(existingImports, indexFileRelativePath)
@@ -1027,7 +1032,7 @@ class NodeItem implements Item {
 
 function checkIfIndexFile(fileNameWithExtension: string) {
 	const parts = fileNameWithExtension.split('.')
-	return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(parts[1])
+	return parts.length === 2 && parts[0] === 'index' && SUPPORTED_EXTENSION.test(fileNameWithExtension)
 }
 
 function getRequirePath(node: ts.Node) {

@@ -1,3 +1,6 @@
+### 2.6.3
+- Fixed `codeQuicken.javascript.fileExtension` setting so it does not put TS and TSX file extensions regardless of the setting.
+
 ### 2.6.2
 - Amended `codeQuicken.javascript.predefinedVariableNames` and `codeQuicken.typescript.predefinedVariableNames` settings so it accepts a workspace file path as a regular expression.
 - Amended `codeQuicken.javascript.fileExtension` and `codeQuicken.typescript.fileExtension` settings so it has the default value of `true`.

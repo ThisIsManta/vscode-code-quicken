@@ -7,6 +7,7 @@ import JavaScript from './JavaScript'
 import * as ts from 'typescript'
 
 const JAVASCRIPT_EXTENSION = /\.jsx?$/i
+const TYPESCRIPT_EXTENSION = /\.tsx?$/i
 
 export default class TypeScript extends JavaScript {
 	constructor(config: Configurations, fileWatch: vscode.FileSystemWatcher) {
@@ -29,6 +30,11 @@ export default class TypeScript extends JavaScript {
 		}
 
 		return ['ts', 'tsx']
+	}
+
+	checkIfFileExtensionShouldBeRemoved(targetFileExtension: string, document: vscode.TextDocument) {
+		return super.checkIfFileExtensionShouldBeRemoved(targetFileExtension, document) ||
+			document.languageId.startsWith('typescript') && TYPESCRIPT_EXTENSION.test(targetFileExtension)
 	}
 
 	async checkIfImportDefaultIsPreferredOverNamespace() {
