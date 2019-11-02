@@ -265,7 +265,7 @@
     },
     "dependencies": {
         "glob": "^7.1.4",
-        "lodash": "^4.17.11",
+        "lodash": "^4.17.13",
         "stylus": "^0.54.5",
         "typescript": "^3.5.2"
     }
